@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -11,74 +12,77 @@
     <!-- Babel for in-browser JSX transpilation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+    <script>
+        // 🔴🔴🔴 นำ Firebase Config ของคุณมาวางตรงนี้ 🔴🔴🔴
+        // ดูวิธีทำได้ที่หน้าจอเมื่อรันโค้ดนี้ครั้งแรก
+        window.MY_FIREBASE_CONFIG = {
+            apiKey: "",
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
+    </script>
+
     <style>
         body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; }
-        
-        /* Custom Scrollbar */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } 
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } 
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 99px; } 
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; } 
-        
-        /* Animations */
         @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } } 
         .animate-in { animation: fadeIn 0.4s ease forwards; } 
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} } 
         .animate-pulse { animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite; } 
         @keyframes spin { to { transform: rotate(360deg); } } 
         .animate-spin { animation: spin 1s linear infinite; } 
-        .typing-dots::after { content:'...'; animation: typingDots 1.2s steps(4,end) infinite; } 
-        @keyframes typingDots { 0%,20%{color:transparent;text-shadow:.25em 0 0 transparent,.5em 0 0 transparent} 40%{color:inherit;text-shadow:.25em 0 0 transparent,.5em 0 0 transparent} 60%{text-shadow:.25em 0 0 inherit,.5em 0 0 transparent} 80%,100%{text-shadow:.25em 0 0 inherit,.5em 0 0 inherit} }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- Main React Application -->
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useMemo, useRef } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0';
         import {
-            LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area
+            BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, AreaChart, Area
         } from 'https://esm.sh/recharts@2.12.0?deps=react@18.2.0,react-dom@18.2.0';
         import {
-            Home, Users, Target, Calendar, PieChart as PieIcon, Settings, LogOut,
-            Plus, Bell, Search, Edit2, Phone, MessageSquare, BrainCircuit,
+            Home, Users, Target, Calendar, Settings, LogOut, Plus, Search, Edit2, Phone, BrainCircuit,
             ChevronRight, Activity, TrendingUp, AlertCircle, CheckCircle2, UserPlus, FileText, Gift,
-            Menu, X, Briefcase, Filter, Trophy, BarChart3, Database, Save, Trash2, ShieldCheck, Mail, Lock, User, Star, Clock, Sparkles, Send, Bot, ChevronDown
+            Menu, X, Briefcase, Filter, Trophy, Database, Save, Trash2, ShieldCheck, Mail, Lock, User, Star, Clock, Sparkles, Send, Bot
         } from 'https://esm.sh/lucide-react@0.358.0?deps=react@18.2.0';
 
+        // --- FIREBASE SDK ---
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        // --- CONSTANTS ---
         const ADMIN_EMAIL = "toei.mar168@gmail.com";
         const STATUS_LIST = ['ลีดใหม่', 'นัดหมาย', 'เสนอแบบ', 'ติดตามผล', 'ปิดการขาย'];
         const CHART_COLORS = ['#3b82f6', '#f97316', '#10b981', '#8b5cf6', '#ec4899'];
 
+        // --- UTILITIES ---
         const formatCurrency = (val) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 }).format(val || 0);
-        
         const calculateAge = (dob) => {
             if(!dob) return 0;
             const diff_ms = Date.now() - new Date(dob).getTime();
-            const age_dt = new Date(diff_ms);
-            return Math.abs(age_dt.getUTCFullYear() - 1970);
+            return Math.abs(new Date(diff_ms).getUTCFullYear() - 1970);
         };
-        
         const toBuddhistYear = (dateStr) => {
             if(!dateStr) return '-';
             const d = new Date(dateStr);
             return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear() + 543}`;
         };
-        
         const getTodayStr = () => new Date().toISOString().split('T')[0];
 
         async function callClaudeAPI(messages, systemPrompt = "") {
             const response = await fetch("https://api.anthropic.com/v1/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514",
-                    max_tokens: 1000,
-                    system: systemPrompt,
-                    messages
-                })
+                body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: systemPrompt, messages })
             });
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
@@ -89,49 +93,72 @@
         // MAIN APPLICATION COMPONENT
         // ============================================================================
         function InsuranceCRMProduction() {
-            // โหลดข้อมูลจาก LocalStorage ถ้ามี
-            const [users, setUsers] = useState(() => {
-                const saved = localStorage.getItem('nova_users');
-                return saved ? JSON.parse(saved) : [];
-            });
-            const [customers, setCustomers] = useState(() => {
-                const saved = localStorage.getItem('nova_customers');
-                return saved ? JSON.parse(saved) : [];
-            });
-            const [tasks, setTasks] = useState(() => {
-                const saved = localStorage.getItem('nova_tasks');
-                return saved ? JSON.parse(saved) : [];
-            });
-            const [currentUser, setCurrentUser] = useState(() => {
-                const saved = localStorage.getItem('nova_currentUser');
-                return saved ? JSON.parse(saved) : null;
-            });
-            
+            const [fbUser, setFbUser] = useState(null);
+            const [db, setDb] = useState(null);
+            const [isFirebaseConfigured, setIsFirebaseConfigured] = useState(true);
+
+            const [users, setUsers] = useState([]);
+            const [customers, setCustomers] = useState([]);
+            const [tasks, setTasks] = useState([]);
+            const [currentUser, setCurrentUser] = useState(null);
             const [currentRoute, setCurrentRoute] = useState('home');
             const [isSidebarOpen, setSidebarOpen] = useState(false);
 
-            // บันทึกข้อมูลลง LocalStorage อัตโนมัติทุกครั้งที่มีการเปลี่ยนแปลง
-            useEffect(() => { localStorage.setItem('nova_users', JSON.stringify(users)); }, [users]);
-            useEffect(() => { localStorage.setItem('nova_customers', JSON.stringify(customers)); }, [customers]);
-            useEffect(() => { localStorage.setItem('nova_tasks', JSON.stringify(tasks)); }, [tasks]);
-            useEffect(() => { localStorage.setItem('nova_currentUser', JSON.stringify(currentUser)); }, [currentUser]);
+            // 1. Initialize Firebase
+            useEffect(() => {
+                const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+                const config = configStr ? JSON.parse(configStr) : (window.MY_FIREBASE_CONFIG.apiKey ? window.MY_FIREBASE_CONFIG : null);
 
-            const handleAuth = (email, password, name, team, isLogin) => {
-                if (isLogin) {
-                    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-                    if (user) { setCurrentUser(user); setCurrentRoute('home'); }
-                    else alert("รหัสผ่านหรืออีเมลไม่ถูกต้อง กรุณาลองใหม่");
-                } else {
-                    const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-                    if (existingUser) { alert("อีเมลนี้มีการลงทะเบียนแล้ว กรุณาเข้าสู่ระบบ"); return; }
-                    const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'agent';
-                    const newUser = { id: Date.now().toString(), name, email, password, team: role === 'admin' ? 'HQ Management' : team, role, targetRevenue: 100000 };
-                    setUsers(prev => [...prev, newUser]);
-                    setCurrentUser(newUser);
-                    setCurrentRoute('home');
+                if (!config) {
+                    setIsFirebaseConfigured(false);
+                    return;
                 }
-            };
 
+                try {
+                    const app = initializeApp(config);
+                    const auth = getAuth(app);
+                    const firestore = getFirestore(app);
+                    setDb(firestore);
+
+                    const initAuth = async () => {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    };
+                    initAuth();
+
+                    const unsubscribe = onAuthStateChanged(auth, setFbUser);
+                    return () => unsubscribe();
+                } catch (error) {
+                    console.error("Firebase init error:", error);
+                    setIsFirebaseConfigured(false);
+                }
+            }, []);
+
+            // 2. Sync Real-time Database
+            useEffect(() => {
+                if (!fbUser || !db) return;
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'github-nova-crm';
+
+                const unsubUsers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'crm_users'),
+                    (snap) => setUsers(snap.docs.map(d => d.data())),
+                    (err) => console.error(err)
+                );
+                const unsubCustomers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'crm_customers'),
+                    (snap) => setCustomers(snap.docs.map(d => d.data())),
+                    (err) => console.error(err)
+                );
+                const unsubTasks = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'crm_tasks'),
+                    (snap) => setTasks(snap.docs.map(d => d.data())),
+                    (err) => console.error(err)
+                );
+
+                return () => { unsubUsers(); unsubCustomers(); unsubTasks(); };
+            }, [fbUser, db]);
+
+            // Sync Current User when profile updates in DB
             useEffect(() => {
                 if (currentUser) {
                     const updated = users.find(u => u.id === currentUser.id);
@@ -141,12 +168,73 @@
                 }
             }, [users]);
 
-            const addCustomer = (data) => setCustomers(prev => [...prev, { ...data, id: Date.now().toString(), agent_id: currentUser.id }]);
-            const updateCustomer = (data) => setCustomers(prev => prev.map(c => c.id === data.id ? data : c));
-            const deleteCustomer = (id) => setCustomers(prev => prev.filter(c => c.id !== id));
-            const addTask = (data) => setTasks(prev => [...prev, { ...data, id: Date.now().toString(), agent_id: currentUser.id }]);
-            const toggleTask = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' } : t));
-            const removeTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
+            // Setup Firebase screen
+            if (!isFirebaseConfigured) {
+                return (
+                    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
+                        <div className="bg-slate-800 p-8 rounded-3xl max-w-2xl border border-slate-700 shadow-2xl">
+                            <Database size={64} className="mx-auto text-emerald-400 mb-6" />
+                            <h2 className="text-3xl font-black text-amber-400 mb-4">เชื่อมต่อระบบหลังบ้าน (Database)</h2>
+                            <p className="text-slate-300 text-lg mb-6 leading-relaxed">
+                                เพื่อให้ระบบสามารถจดจำข้อมูลบัญชี ล็อคอินซ้ำได้ และไม่หายไปเมื่อกดรีเฟรช คุณจำเป็นต้องตั้งค่า Firebase ก่อน
+                            </p>
+                            <div className="bg-slate-900 p-6 rounded-2xl text-left border border-slate-700 space-y-4">
+                                <h3 className="font-bold text-emerald-400 text-lg">วิธีตั้งค่าฟรี (ใช้เวลาเพียง 3 นาที):</h3>
+                                <ol className="list-decimal pl-5 text-slate-300 space-y-3 text-sm font-bold">
+                                    <li>ไปที่ <a href="https://console.firebase.google.com/" target="_blank" className="text-blue-400 underline">Firebase Console</a> และสร้างโปรเจกต์ใหม่</li>
+                                    <li>ไปที่เมนู <b>Build &gt; Firestore Database</b> แล้วกด Create Database (เลือก Start in test mode)</li>
+                                    <li>ไปที่เมนู <b>Build &gt; Authentication</b> กด Get Started แล้วกดเปิดใช้งานปุ่ม <b>Anonymous</b></li>
+                                    <li>ไปที่เมนู Project Settings (รูปฟันเฟือง) เลื่อนลงมาล่างสุด กดสร้าง Web App (ไอคอน <b>&lt;/&gt;</b>)</li>
+                                    <li>คัดลอกค่า <b>firebaseConfig</b> มาวางในไฟล์ <code>index.html</code> ตรงบรรทัดที่เขียนว่า <code>window.MY_FIREBASE_CONFIG</code></li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!fbUser || !db) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><LoadingSpinner text="กำลังเชื่อมต่อฐานข้อมูล..." /></div>;
+
+            // --- DATABASE MUTATION FUNCTIONS ---
+            const getDocRef = (collectionName, id) => {
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'github-nova-crm';
+                return doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
+            };
+
+            const handleAuth = async (email, password, name, team, isLogin) => {
+                if (isLogin) {
+                    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+                    if (user) { setCurrentUser(user); setCurrentRoute('home'); }
+                    else alert("รหัสผ่านหรืออีเมลไม่ถูกต้อง กรุณาลองใหม่");
+                } else {
+                    const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+                    if (existingUser) { alert("อีเมลนี้มีการลงทะเบียนแล้ว กรุณาเข้าสู่ระบบ"); return; }
+                    
+                    const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'agent';
+                    const newUser = { id: Date.now().toString(), name, email, password, team: role === 'admin' ? 'HQ Management' : team, role, targetRevenue: 100000 };
+                    
+                    await setDoc(getDocRef('crm_users', newUser.id), newUser);
+                    setCurrentUser(newUser);
+                    setCurrentRoute('home');
+                }
+            };
+
+            const updateSettings = async (updatedData) => await setDoc(getDocRef('crm_users', updatedData.id), updatedData);
+            const addCustomer = async (data) => {
+                const newCustomer = { ...data, id: Date.now().toString(), agent_id: currentUser.id };
+                await setDoc(getDocRef('crm_customers', newCustomer.id), newCustomer);
+            };
+            const updateCustomer = async (data) => await setDoc(getDocRef('crm_customers', data.id), data);
+            const deleteCustomer = async (id) => await deleteDoc(getDocRef('crm_customers', id));
+            const addTask = async (data) => {
+                const newTask = { ...data, id: Date.now().toString(), agent_id: currentUser.id };
+                await setDoc(getDocRef('crm_tasks', newTask.id), newTask);
+            };
+            const toggleTask = async (id) => {
+                const t = tasks.find(x => x.id === id);
+                if (t) await setDoc(getDocRef('crm_tasks', id), { ...t, status: t.status === 'completed' ? 'pending' : 'completed' });
+            };
+            const removeTask = async (id) => await deleteDoc(getDocRef('crm_tasks', id));
 
             if (!currentUser) return <AuthView onAuth={handleAuth} users={users} />;
 
@@ -218,7 +306,7 @@
                             <div className="flex items-center gap-3">
                                 <div className="hidden sm:flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
                                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                                    <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">Online</span>
+                                    <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">Database Sync</span>
                                 </div>
                             </div>
                         </header>
@@ -228,18 +316,18 @@
                                 <>
                                     {currentRoute === 'home' && <AdminHomeView users={users} customers={customers} />}
                                     {currentRoute === 'admin-customers' && <AdminCustomersView customers={customers} users={users} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer} />}
-                                    {currentRoute === 'settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users} />}
+                                    {currentRoute === 'settings' && <SettingsView user={currentUser} updateSettings={updateSettings} users={users} />}
                                 </>
                             ) : (
                                 <>
-                                    {currentRoute === 'home' && <AgentHomeView user={currentUser} customers={customers} tasks={tasks} addTask={addTask} toggleTask={toggleTask} removeTask={removeTask} setUsers={setUsers} users={users} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer} />}
+                                    {currentRoute === 'home' && <AgentHomeView user={currentUser} customers={customers} tasks={tasks} addTask={addTask} toggleTask={toggleTask} removeTask={removeTask} updateSettings={updateSettings} users={users} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer} />}
                                     {currentRoute === 'add-lead' && <AddLeadView onAdd={addCustomer} setRoute={setCurrentRoute} />}
                                     {currentRoute === 'customers' && <CustomersView user={currentUser} customers={customers} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer} />}
                                     {currentRoute === 'pipeline' && <PipelineView customers={customers.filter(c => c.agent_id === currentUser.id)} />}
                                     {currentRoute === 'analytics' && <AnalyticsView customers={customers.filter(c => c.agent_id === currentUser.id)} user={currentUser} />}
                                     {currentRoute === 'ranking' && <RankingView users={users} customers={customers} currentUser={currentUser} />}
                                     {currentRoute === 'ai-assistant' && <AIAssistantView user={currentUser} customers={customers.filter(c => c.agent_id === currentUser.id)} />}
-                                    {currentRoute === 'settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users} />}
+                                    {currentRoute === 'settings' && <SettingsView user={currentUser} updateSettings={updateSettings} users={users} />}
                                 </>
                             )}
                         </div>
@@ -262,9 +350,9 @@
 
         function LoadingSpinner({ text = "กำลังประมวลผล..." }) {
             return (
-                <div className="flex items-center gap-3 text-indigo-300">
-                    <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="font-bold text-sm">{text}</span>
+                <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="w-12 h-12 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="font-bold text-emerald-400 text-lg">{text}</span>
                 </div>
             );
         }
@@ -364,7 +452,7 @@
         // ============================================================================
         // AGENT HOME VIEW
         // ============================================================================
-        function AgentHomeView({ user, customers, tasks, addTask, toggleTask, removeTask, setUsers, users, updateCustomer, deleteCustomer }) {
+        function AgentHomeView({ user, customers, tasks, addTask, toggleTask, removeTask, updateSettings, updateCustomer, deleteCustomer }) {
             const [isEditingTarget, setEditingTarget] = useState(false);
             const [tempTarget, setTempTarget] = useState(user.targetRevenue || 100000);
             const [newTaskStr, setNewTaskStr] = useState('');
@@ -429,7 +517,7 @@
                                     {isEditingTarget ? (
                                         <div className="flex gap-2">
                                             <input type="number" value={tempTarget} onChange={e=>setTempTarget(e.target.value)} className="bg-white text-slate-900 px-4 py-2.5 rounded-xl font-black w-40 text-xl focus:ring-4 focus:ring-orange-400/50 outline-none" />
-                                            <button onClick={() => { setUsers(users.map(u => u.id === user.id ? {...u, targetRevenue: Number(tempTarget)} : u)); setEditingTarget(false); }} className="bg-orange-500 px-5 rounded-xl font-black shadow-lg hover:bg-orange-600 transition">SAVE</button>
+                                            <button onClick={() => { updateSettings({...user, targetRevenue: Number(tempTarget)}); setEditingTarget(false); }} className="bg-orange-500 px-5 rounded-xl font-black shadow-lg hover:bg-orange-600 transition">SAVE</button>
                                         </div>
                                     ) : (
                                         <div className="flex items-center gap-3">
@@ -1387,17 +1475,19 @@
         // ============================================================================
         // SETTINGS VIEW
         // ============================================================================
-        function SettingsView({ user, setUsers, users }) {
+        function SettingsView({ user, updateSettings, users }) {
             const [formData, setFormData] = useState({ name: user.name, email: user.email, password: user.password, team: user.team });
             const [saved, setSaved] = useState(false);
 
-            const handleSave = (e) => {
+            const handleSave = async (e) => {
                 e.preventDefault();
                 if(formData.email.toLowerCase() !== user.email.toLowerCase() && users.find(u => u.email.toLowerCase() === formData.email.toLowerCase() && u.id !== user.id)) {
                     alert('อีเมลนี้มีผู้ใช้งานแล้ว');
                     return;
                 }
-                setUsers(users.map(u => u.id === user.id ? { ...u, ...formData } : u));
+                
+                await updateSettings({ ...user, ...formData });
+                
                 setSaved(true);
                 setTimeout(() => setSaved(false), 3000);
             };
