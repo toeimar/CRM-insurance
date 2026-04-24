@@ -4,10 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nova CRM - Insurance Sales Platform</title>
-  <!-- แก้ไข: ใช้ development build เพื่อให้ Babel transform JSX ได้ -->
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <!-- แก้ไข: ระบุ version Recharts ชัดเจน -->
   <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
@@ -51,16 +49,31 @@
     };
     const today = () => new Date().toISOString().split('T')[0];
 
+    // ===== แก้ไข: ใช้ Gemini API แทน Claude =====
     async function callClaude(messages, sys) {
       if (!sys) sys = "";
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: sys, messages })
-      });
+      const apiKey = localStorage.getItem('nova_api_key');
+      if (!apiKey) throw new Error("NO_KEY");
+
+      const contents = messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
+      }));
+
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: sys }] },
+            contents
+          })
+        }
+      );
       const d = await r.json();
       if (d.error) throw new Error(d.error.message);
-      return d.content.map(function(i){ return i.text || ""; }).join("\n");
+      return d.candidates[0].content.parts[0].text;
     }
 
     const Icon = ({ d, size, className, stroke }) => (
@@ -103,6 +116,7 @@
     const BotIcon = ({ size, className }) => <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>;
     const PlusIcon = ({ size, className }) => <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
     const BriefcaseIcon = ({ size, className }) => <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
+    const KeyIcon = ({ size, className }) => <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>;
 
     function MenuLink({ icon: Ico, label, active, onClick, color, bg }) {
       return (
@@ -110,6 +124,69 @@
           <Ico size={17} className={active ? color : "text-slate-400"} />
           {label}
         </button>
+      );
+    }
+
+    // ===== หน้ากรอก API Key =====
+    function ApiKeySetup({ onDone }) {
+      const [key, setKey] = useState('');
+      const [showKey, setShowKey] = useState(false);
+      const [error, setError] = useState('');
+
+      const submit = () => {
+        if (!key.startsWith('AIza')) {
+          setError('API Key ไม่ถูกต้อง ต้องขึ้นต้นด้วย AIza...');
+          return;
+        }
+        localStorage.setItem('nova_api_key', key);
+        onDone();
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4" style={{background:'linear-gradient(135deg,#0f172a,#1e1b4b,#0f172a)'}}>
+          <div className="bg-white/95 rounded-3xl shadow-2xl p-8 w-full max-w-md border border-white/20">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl" style={{background:'linear-gradient(135deg,#2563eb,#4f46e5)'}}>
+                <KeyIcon className="text-white" size={32}/>
+              </div>
+              <h2 className="text-2xl font-black text-slate-800">ตั้งค่า API Key</h2>
+              <p className="text-slate-400 font-bold text-sm mt-2">ใส่ Gemini API Key เพื่อเปิดใช้งาน AI</p>
+            </div>
+
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 mb-6">
+              <p className="text-blue-700 font-black text-xs mb-1">🔒 ปลอดภัย 100%</p>
+              <p className="text-blue-600 font-bold text-xs">Key เก็บในเครื่องคุณเท่านั้น ไม่ได้ส่งไปที่อื่น ไม่อยู่ใน GitHub</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Gemini API Key</label>
+                <div className="relative">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={key}
+                    onChange={e => { setKey(e.target.value); setError(''); }}
+                    placeholder="AIza..."
+                    className="w-full pl-4 pr-12 py-3.5 rounded-xl bg-white border-2 border-slate-200 focus:border-blue-500 outline-none font-bold text-slate-800 transition"
+                  />
+                  <button type="button" onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-black px-2 py-1 rounded-lg hover:bg-slate-100">
+                    {showKey ? 'ซ่อน' : 'ดู'}
+                  </button>
+                </div>
+                {error && <p className="text-red-500 font-bold text-xs mt-2">{error}</p>}
+              </div>
+
+              <button onClick={submit} className="w-full py-4 text-white font-black rounded-2xl shadow-xl transition-all hover:-translate-y-0.5" style={{background:'linear-gradient(135deg,#2563eb,#4f46e5)'}}>
+                บันทึกและเริ่มใช้งาน
+              </button>
+
+              <p className="text-center text-xs text-slate-400 font-bold">
+                ยังไม่มี Key? ไปสร้างฟรีที่{' '}
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-blue-500 underline">aistudio.google.com</a>
+              </p>
+            </div>
+          </div>
+        </div>
       );
     }
 
@@ -507,7 +584,7 @@
           const msg = 'วิเคราะห์ลูกค้า: ชื่อ ' + f.name + ', อายุ ' + f.age + ', อาชีพ ' + (f.occupation||'ไม่ระบุ') + ', รายได้ ' + f.income + ', สถานะ ' + f.status + ', แผนที่สนใจ ' + (f.interestedPlan||'ไม่ระบุ');
           const r = await callClaude([{role:'user',content:msg}], sys);
           setAiInsight(r);
-        } catch(e) { setAiError("ไม่สามารถเชื่อมต่อ AI ได้"); }
+        } catch(e) { setAiError("ไม่สามารถเชื่อมต่อ AI ได้: " + e.message); }
         setAiLoading(false);
       };
 
@@ -534,7 +611,7 @@
                 <div className="col-span-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">หมายเหตุ</label><textarea name="note" value={f.note||''} onChange={ch} rows={2} className={inp}/></div>
               </div>
               <div className="rounded-2xl p-5 text-white" style={{background:'linear-gradient(135deg,#1e1b4b,#4c1d95)'}}>
-                <h3 className="font-black flex items-center gap-2 mb-3"><BrainIcon size={18}/> AI วิเคราะห์</h3>
+                <h3 className="font-black flex items-center gap-2 mb-3"><BrainIcon size={18}/> AI วิเคราะห์ (Gemini)</h3>
                 <div className="bg-white/10 rounded-xl p-4 min-h-[80px] flex items-center justify-center mb-3">
                   {aiLoading ? <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full spin"></div>
                   : aiError ? <p className="text-red-300 text-sm font-bold">{aiError}</p>
@@ -671,7 +748,7 @@
           const reply = await callClaude(newMsgs.map(m=>({role:m.role,content:m.content})), sys);
           setMessages(function(p){ return [...p, {role:'assistant',content:reply}]; });
         } catch(e) {
-          setMessages(function(p){ return [...p, {role:'assistant',content:'❌ ไม่สามารถเชื่อมต่อได้'}]; });
+          setMessages(function(p){ return [...p, {role:'assistant',content:'❌ ไม่สามารถเชื่อมต่อได้: ' + e.message}]; });
         }
         setLoading(false);
       };
@@ -684,7 +761,7 @@
             </div>
             <div>
               <h2 className="text-2xl font-black text-slate-800">AI Sales Assistant</h2>
-              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">ขับเคลื่อนด้วย Claude AI</p>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">ขับเคลื่อนด้วย Gemini AI (ฟรี!)</p>
             </div>
           </div>
           <div className="rounded-3xl overflow-hidden shadow-2xl" style={{background:'linear-gradient(135deg,#0f172a,#1e1b4b)'}}>
@@ -774,7 +851,7 @@
       );
     }
 
-    function SettingsView({ user, setUsers, users }) {
+    function SettingsView({ user, setUsers, users, onResetKey }) {
       const [f, setF] = useState({ name:user.name, email:user.email, password:user.password, team:user.team });
       const [saved, setSaved] = useState(false);
 
@@ -807,6 +884,14 @@
               {saved ? <span className="flex items-center gap-2"><CheckCircle2Icon size={20}/> บันทึกสำเร็จ!</span> : <span className="flex items-center gap-2"><SaveIcon size={20}/> บันทึก</span>}
             </button>
           </form>
+          {/* ปุ่มเปลี่ยน API Key */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
+            <h3 className="font-black text-slate-800 mb-2 flex items-center gap-2"><KeyIcon size={18} className="text-blue-500"/> Gemini API Key</h3>
+            <p className="text-slate-400 font-bold text-sm mb-4">เปลี่ยน API Key ถ้าต้องการ</p>
+            <button onClick={onResetKey} className="w-full py-3 border-2 border-slate-200 rounded-xl font-black text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-2">
+              <KeyIcon size={16}/> เปลี่ยน API Key
+            </button>
+          </div>
         </div>
       );
     }
@@ -862,7 +947,7 @@
       );
     }
 
-    function AppShell({ currentUser, users, customers, tasks, addCustomer, updateCustomer, deleteCustomer, addTask, toggleTask, removeTask, setUsers, currentRoute, setCurrentRoute, setSidebarOpen, isSidebarOpen, onLogout }) {
+    function AppShell({ currentUser, users, customers, tasks, addCustomer, updateCustomer, deleteCustomer, addTask, toggleTask, removeTask, setUsers, currentRoute, setCurrentRoute, setSidebarOpen, isSidebarOpen, onLogout, onResetKey }) {
       const agentNav = [
         { route:'home', icon:HomeIcon, label:'แดชบอร์ด', color:'text-blue-600', bg:'bg-blue-50 border-blue-200' },
         { route:'add-lead', icon:UserPlusIcon, label:'เพิ่ม Lead', color:'text-orange-500', bg:'bg-orange-50 border-orange-200' },
@@ -919,7 +1004,7 @@
               {currentUser.role === 'admin' ? (
                 <div>
                   {currentRoute==='home' && <AdminHome users={users} customers={customers}/>}
-                  {currentRoute==='settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users}/>}
+                  {currentRoute==='settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users} onResetKey={onResetKey}/>}
                 </div>
               ) : (
                 <div>
@@ -930,7 +1015,7 @@
                   {currentRoute==='analytics' && <AnalyticsView customers={customers.filter(c=>c.agent_id===currentUser.id)}/>}
                   {currentRoute==='ranking' && <RankingView users={users} customers={customers} currentUser={currentUser}/>}
                   {currentRoute==='ai-assistant' && <AIAssistantView user={currentUser} customers={customers.filter(c=>c.agent_id===currentUser.id)}/>}
-                  {currentRoute==='settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users}/>}
+                  {currentRoute==='settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users} onResetKey={onResetKey}/>}
                 </div>
               )}
             </div>
@@ -940,12 +1025,25 @@
     }
 
     function App() {
-      const [users, setUsers] = useState([]);
-      const [customers, setCustomers] = useState([]);
-      const [tasks, setTasks] = useState([]);
+      // ===== localStorage persistence =====
+      const [users, setUsers] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('nova_users') || '[]'); } catch(e) { return []; }
+      });
+      const [customers, setCustomers] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('nova_customers') || '[]'); } catch(e) { return []; }
+      });
+      const [tasks, setTasks] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('nova_tasks') || '[]'); } catch(e) { return []; }
+      });
       const [currentUser, setCurrentUser] = useState(null);
       const [currentRoute, setCurrentRoute] = useState('home');
       const [isSidebarOpen, setSidebarOpen] = useState(false);
+      const [showKeySetup, setShowKeySetup] = useState(!localStorage.getItem('nova_api_key'));
+
+      // บันทึกข้อมูลอัตโนมัติ
+      useEffect(() => { localStorage.setItem('nova_users', JSON.stringify(users)); }, [users]);
+      useEffect(() => { localStorage.setItem('nova_customers', JSON.stringify(customers)); }, [customers]);
+      useEffect(() => { localStorage.setItem('nova_tasks', JSON.stringify(tasks)); }, [tasks]);
 
       const handleAuth = (email, password, name, team, isLogin) => {
         if (isLogin) {
@@ -967,6 +1065,11 @@
         setCurrentRoute('home');
       };
 
+      const handleResetKey = () => {
+        localStorage.removeItem('nova_api_key');
+        setShowKeySetup(true);
+      };
+
       useEffect(() => {
         if (currentUser) {
           const updated = users.find(u=>u.id===currentUser.id);
@@ -981,6 +1084,8 @@
       const toggleTask = (id) => setTasks(function(prev){ return prev.map(t=>t.id===id ? Object.assign({}, t, {status:t.status==='completed'?'pending':'completed'}) : t); });
       const removeTask = (id) => setTasks(function(prev){ return prev.filter(t=>t.id!==id); });
 
+      // แสดงหน้ากรอก API Key ก่อนถ้ายังไม่มี
+      if (showKeySetup) return <ApiKeySetup onDone={() => setShowKeySetup(false)}/>;
       if (!currentUser) return <AuthView onAuth={handleAuth} users={users}/>;
 
       return (
@@ -990,7 +1095,7 @@
           addTask={addTask} toggleTask={toggleTask} removeTask={removeTask}
           setUsers={setUsers} currentRoute={currentRoute} setCurrentRoute={setCurrentRoute}
           setSidebarOpen={setSidebarOpen} isSidebarOpen={isSidebarOpen}
-          onLogout={handleLogout}
+          onLogout={handleLogout} onResetKey={handleResetKey}
         />
       );
     }
