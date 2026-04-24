@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -73,19 +74,14 @@
         const getTodayStr = () => new Date().toISOString().split('T')[0];
 
         // --- 4. REAL CLAUDE API CALL ---
-        // หมายเหตุ: การเรียก API โดยตรงจาก Browser ไปยัง Anthropic อาจติดปัญหา CORS Policy ของผู้ให้บริการ (เพื่อความปลอดภัย)
-        // โค้ดนี้ถูกคงไว้ตามต้นฉบับ หากเกิด Error ระบบจะขึ้นแจ้งเตือนที่ UI อัตโนมัติและไม่ทำให้แอพพัง
         async function callClaudeAPI(messages, systemPrompt = "") {
             const response = await fetch("https://api.anthropic.com/v1/messages", {
                 method: "POST",
                 headers: { 
                     "Content-Type": "application/json",
-                    // "x-api-key": "YOUR_API_KEY_HERE", // ถ้ามี API Key ใส่ตรงนี้
-                    // "anthropic-version": "2023-06-01",
-                    // "anthropic-dangerous-direct-browser-access": "true" 
                 },
                 body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514", // Model Name ตามโค้ดเดิม
+                    model: "claude-sonnet-4-20250514",
                     max_tokens: 1000,
                     system: systemPrompt,
                     messages
