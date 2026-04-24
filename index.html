@@ -1,13 +1,14 @@
 <!DOCTYPE html>
-
 <html lang="th">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nova CRM - Insurance Sales Platform</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+  <!-- แก้ไข: ใช้ development build เพื่อให้ Babel transform JSX ได้ -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- แก้ไข: ระบุ version Recharts ชัดเจน -->
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
   <style>
@@ -29,12 +30,8 @@
   <script>
     window.onerror = function(msg, src, line, col, err) {
       document.getElementById('root').innerHTML = '<div style="padding:32px;font-family:system-ui;max-width:600px;margin:auto;margin-top:60px;"><h2 style="color:#ef4444;font-weight:900;margin-bottom:16px;">เกิดข้อผิดพลาด</h2><pre style="background:#fef2f2;padding:16px;border-radius:12px;font-size:13px;overflow:auto;color:#991b1b;">' + msg + '\nLine: ' + line + '</pre></div>';
-
-```
-  return false;
-};
-```
-
+      return false;
+    };
   </script>
 
   <script type="text/babel" data-presets="react,env">
@@ -66,7 +63,6 @@
       return d.content.map(function(i){ return i.text || ""; }).join("\n");
     }
 
-    // Icons (SVG inline)
     const Icon = ({ d, size, className, stroke }) => (
       <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke={stroke||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className||""}>
         <path d={d}/>
@@ -108,7 +104,6 @@
     const PlusIcon = ({ size, className }) => <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
     const BriefcaseIcon = ({ size, className }) => <svg width={size||16} height={size||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
 
-    // ─── MENU LINK ───────────────────────────────────────────
     function MenuLink({ icon: Ico, label, active, onClick, color, bg }) {
       return (
         <button onClick={onClick} className={"w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all border-2 " + (active ? (bg + " " + color + " shadow-sm") : "text-slate-500 hover:bg-slate-50 border-transparent hover:border-slate-100")}>
@@ -118,7 +113,6 @@
       );
     }
 
-    // ─── AUTH ─────────────────────────────────────────────────
     function AuthView({ onAuth, users }) {
       const [isLogin, setIsLogin] = useState(true);
       const [email, setEmail] = useState('');
@@ -191,7 +185,6 @@
       );
     }
 
-    // ─── AGENT HOME ───────────────────────────────────────────
     function AgentHome({ user, customers, tasks, addTask, toggleTask, removeTask, setUsers, users, updateCustomer, deleteCustomer }) {
       const [editTarget, setEditTarget] = useState(false);
       const [tempTarget, setTempTarget] = useState(user.targetRevenue || 100000);
@@ -352,7 +345,6 @@
       );
     }
 
-    // ─── ADD LEAD ─────────────────────────────────────────────
     function AddLead({ onAdd, setRoute }) {
       const [f, setF] = useState({
         name:'', gender:'Male', dob:'', phone:'', lineId:'', age:0,
@@ -412,612 +404,598 @@
                 <div><label className={lbl}>แหล่งที่มา</label><select name="leadSource" value={f.leadSource} onChange={ch} className={inp}><option>Facebook Ads</option><option>Tiktok</option><option>Walk-in</option><option>Referral</option><option>Cold Call</option></select></div>
                 <div><label className={lbl}>วันนัดหมาย</label><input type="date" name="appointmentDate" value={f.appointmentDate} onChange={ch} className={inp}/></div>
                 <div className="md:col-span-2"><label className={lbl}>หมายเหตุ</label><textarea name="note" value={f.note} onChange={ch} rows={3} className={inp}></textarea></div>
-
-```
-          </div>
-        </div>
-        <div className="flex justify-end gap-4 pt-6 border-t-2 border-slate-100">
-          <button type="button" onClick={() => setRoute('home')} className="px-6 py-3 rounded-2xl font-black text-slate-500 hover:bg-slate-100">ยกเลิก</button>
-          <button type="submit" className="px-10 py-3 rounded-2xl font-black text-white shadow-xl flex items-center gap-2 hover:-translate-y-0.5 transition-all" style={{background:'linear-gradient(135deg,#f97316,#ef4444)'}}>
-            <SaveIcon size={18}/> บันทึก Lead
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// ─── CUSTOMERS VIEW ───────────────────────────────────────
-function CustomersView({ user, customers, updateCustomer, deleteCustomer }) {
-  const [tab, setTab] = useState('ทั้งหมด');
-  const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState(null);
-
-  const mine = customers.filter(c => c.agent_id === user.id);
-  const filtered = mine.filter(c => {
-    const ms = c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
-    const mt = tab === 'ทั้งหมด' || c.status === tab;
-    return ms && mt;
-  });
-
-  return (
-    <div className="space-y-6 fade-in">
-      <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
-        <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3"><DatabaseIcon className="text-emerald-500" size={32}/> ฐานลูกค้า</h2>
-        <div className="relative w-full md:w-80">
-          <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-          <input type="text" placeholder="ค้นหา…" value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-11 pr-4 py-3 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-800"/>
-        </div>
-      </div>
-      <div className="flex overflow-x-auto cscroll gap-2 pb-2">
-        {['ทั้งหมด', ...STATUS_LIST].map(t => (
-          <button key={t} onClick={() => setTab(t)} className={"px-6 py-2.5 rounded-xl font-black whitespace-nowrap border-2 text-sm transition-all " + (tab===t ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white text-slate-500 border-slate-200')}>
-            {t} <span className={"ml-2 px-2 py-0.5 rounded-lg text-xs font-black " + (tab===t ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500')}>{t==='ทั้งหมด' ? mine.length : mine.filter(c=>c.status===t).length}</span>
-          </button>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {filtered.map(c => (
-          <div key={c.id} className="bg-white rounded-3xl p-6 border-2 border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all group">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 text-lg">{c.name.charAt(0)}</div>
-              <div>
-                <h3 className="font-black text-lg text-slate-800">{c.name}</h3>
-                <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5 font-bold"><PhoneIcon size={11}/> {c.phone}</p>
               </div>
             </div>
-            <div className="space-y-2 mb-5 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-sm">
-              <div className="flex justify-between"><span className="text-slate-400 font-bold text-xs uppercase tracking-widest">สถานะ</span><span className="font-black text-slate-700">{c.status}</span></div>
-              <div className="flex justify-between border-t border-slate-200 pt-2"><span className="text-slate-400 font-bold text-xs uppercase tracking-widest">AI Score</span><span className="font-black text-blue-600">{c.ai_score || 0}/100</span></div>
+            <div className="flex justify-end gap-4 pt-6 border-t-2 border-slate-100">
+              <button type="button" onClick={() => setRoute('home')} className="px-6 py-3 rounded-2xl font-black text-slate-500 hover:bg-slate-100">ยกเลิก</button>
+              <button type="submit" className="px-10 py-3 rounded-2xl font-black text-white shadow-xl flex items-center gap-2 hover:-translate-y-0.5 transition-all" style={{background:'linear-gradient(135deg,#f97316,#ef4444)'}}>
+                <SaveIcon size={18}/> บันทึก Lead
+              </button>
             </div>
-            <button onClick={() => setSelected(c)} className="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-black rounded-2xl border-2 border-slate-200 hover:border-blue-300 flex items-center justify-center gap-2 text-sm transition">
-              ดู / แก้ไขข้อมูล <ChevronRightIcon size={16}/>
-            </button>
-          </div>
-        ))}
-      </div>
-      {filtered.length === 0 && (
-        <div className="bg-white p-16 rounded-3xl text-center border-2 border-slate-100">
-          <DatabaseIcon size={64} className="mx-auto text-slate-200 mb-4"/>
-          <h3 className="text-2xl font-black text-slate-500">ไม่พบข้อมูลลูกค้า</h3>
+          </form>
         </div>
-      )}
-      {selected && <CustomerModal customer={selected} onClose={() => setSelected(null)} onSave={updateCustomer} onDelete={deleteCustomer}/>}
-    </div>
-  );
-}
+      );
+    }
 
-// ─── CUSTOMER MODAL ───────────────────────────────────────
-function CustomerModal({ customer, onClose, onSave, onDelete }) {
-  const [f, setF] = useState(Object.assign({}, customer));
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiInsight, setAiInsight] = useState(null);
-  const [aiError, setAiError] = useState(null);
+    function CustomersView({ user, customers, updateCustomer, deleteCustomer }) {
+      const [tab, setTab] = useState('ทั้งหมด');
+      const [search, setSearch] = useState('');
+      const [selected, setSelected] = useState(null);
 
-  const ch = (e) => {
-    const name = e.target.name;
-    const value = e.target.value;
-    const type = e.target.type;
-    const checked = e.target.checked;
-    const v = type==='checkbox' ? checked : value;
-    if (name==='dob') setF(function(p){ return Object.assign({}, p, {dob: v, age: calcAge(v)}); });
-    else setF(function(p){ return Object.assign({}, p, {[name]: v}); });
-  };
+      const mine = customers.filter(c => c.agent_id === user.id);
+      const filtered = mine.filter(c => {
+        const ms = c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
+        const mt = tab === 'ทั้งหมด' || c.status === tab;
+        return ms && mt;
+      });
 
-  const save = () => {
-    const up = Object.assign({}, f);
-    if (up.status==='ปิดการขาย' && customer.status!=='ปิดการขาย') up.closedDate = today();
-    up.lastContact = today();
-    onSave(up);
-    onClose();
-  };
-
-  const genAI = async () => {
-    setAiLoading(true); setAiInsight(null); setAiError(null);
-    try {
-      const sys = 'คุณเป็น AI ที่ปรึกษาการขายประกันชีวิต ตอบภาษาไทยกระชับ 3-4 ประโยค';
-      const msg = 'วิเคราะห์ลูกค้า: ชื่อ ' + f.name + ', อายุ ' + f.age + ', อาชีพ ' + (f.occupation||'ไม่ระบุ') + ', รายได้ ' + f.income + ', สถานะ ' + f.status + ', แผนที่สนใจ ' + (f.interestedPlan||'ไม่ระบุ');
-      const r = await callClaude([{role:'user',content:msg}], sys);
-      setAiInsight(r);
-    } catch(e) { setAiError("ไม่สามารถเชื่อมต่อ AI ได้"); }
-    setAiLoading(false);
-  };
-
-  const inp = "w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl bg-slate-50 outline-none focus:border-blue-500 focus:bg-white font-bold text-slate-800 transition text-sm";
-
-  return (
-    <div className="fixed inset-0 flex items-center justify-center z-[100] p-4" style={{background:'rgba(15,23,42,.7)',backdropFilter:'blur(8px)'}}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl flex flex-col" style={{maxHeight:'90vh',overflow:'hidden'}}>
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-          <h2 className="text-2xl font-black text-slate-800">{f.name}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:bg-slate-100 p-2.5 rounded-xl"><XIcon size={20}/></button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 cscroll">
-          <div className="grid grid-cols-3 gap-4">
-            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">สถานะ</label><select name="status" value={f.status} onChange={ch} className="w-full px-3 py-2.5 border-2 border-blue-200 rounded-xl bg-blue-50 font-black text-blue-800 outline-none text-sm">{STATUS_LIST.map(s=><option key={s}>{s}</option>)}</select></div>
-            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เบี้ย (บาท)</label><input type="number" name="premium" value={f.premium} onChange={ch} className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 font-black text-sm"/></div>
-            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">วันนัด</label><input type="date" name="appointmentDate" value={f.appointmentDate||''} onChange={ch} className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 font-black text-sm"/></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">ชื่อ</label><input type="text" name="name" value={f.name} onChange={ch} className={inp}/></div>
-            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เบอร์โทร</label><input type="text" name="phone" value={f.phone} onChange={ch} className={inp}/></div>
-            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">อาชีพ</label><input type="text" name="occupation" value={f.occupation||''} onChange={ch} className={inp}/></div>
-            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={f.interestedPlan||''} onChange={ch} className={inp}/></div>
-            <div className="col-span-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">หมายเหตุ</label><textarea name="note" value={f.note||''} onChange={ch} rows={2} className={inp}/></div>
-          </div>
-          <div className="rounded-2xl p-5 text-white" style={{background:'linear-gradient(135deg,#1e1b4b,#4c1d95)'}}>
-            <h3 className="font-black flex items-center gap-2 mb-3"><BrainIcon size={18}/> AI วิเคราะห์</h3>
-            <div className="bg-white/10 rounded-xl p-4 min-h-[80px] flex items-center justify-center mb-3">
-              {aiLoading ? <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full spin"></div>
-              : aiError ? <p className="text-red-300 text-sm font-bold">{aiError}</p>
-              : aiInsight ? <p className="text-indigo-50 font-bold leading-relaxed text-sm whitespace-pre-wrap">{aiInsight}</p>
-              : <p className="text-indigo-300 text-sm font-bold text-center">กดปุ่มด้านล่างเพื่อวิเคราะห์</p>}
+      return (
+        <div className="space-y-6 fade-in">
+          <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
+            <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3"><DatabaseIcon className="text-emerald-500" size={32}/> ฐานลูกค้า</h2>
+            <div className="relative w-full md:w-80">
+              <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+              <input type="text" placeholder="ค้นหา…" value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-11 pr-4 py-3 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-800"/>
             </div>
-            <button onClick={genAI} disabled={aiLoading} className="w-full bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 text-white font-black py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm">
-              <BrainIcon size={15}/> วิเคราะห์ลูกค้า
-            </button>
           </div>
-        </div>
-        <div className="px-5 py-4 border-t border-slate-100 flex justify-between">
-          <button onClick={() => { if(window.confirm('แน่ใจหรือไม่?')) { onDelete(customer.id); onClose(); }}} className="px-4 py-2.5 text-red-500 hover:bg-red-50 rounded-xl font-black flex items-center gap-1.5 text-sm"><Trash2Icon size={15}/> ลบ</button>
-          <div className="flex gap-3">
-            <button onClick={onClose} className="px-5 py-2.5 text-slate-500 hover:bg-slate-100 rounded-xl font-black text-sm">ปิด</button>
-            <button onClick={save} className="px-8 py-2.5 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 shadow-lg text-sm">บันทึก</button>
+          <div className="flex overflow-x-auto cscroll gap-2 pb-2">
+            {['ทั้งหมด', ...STATUS_LIST].map(t => (
+              <button key={t} onClick={() => setTab(t)} className={"px-6 py-2.5 rounded-xl font-black whitespace-nowrap border-2 text-sm transition-all " + (tab===t ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white text-slate-500 border-slate-200')}>
+                {t} <span className={"ml-2 px-2 py-0.5 rounded-lg text-xs font-black " + (tab===t ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500')}>{t==='ทั้งหมด' ? mine.length : mine.filter(c=>c.status===t).length}</span>
+              </button>
+            ))}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── PIPELINE ─────────────────────────────────────────────
-function PipelineView({ customers }) {
-  return (
-    <div className="space-y-6 fade-in">
-      <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3"><FilterIcon className="text-purple-500" size={32}/> Sales Pipeline</h2>
-      <div className="flex gap-4 overflow-x-auto pb-4 cscroll items-start">
-        {STATUS_LIST.map((status, idx) => {
-          const list = customers.filter(c => c.status === status);
-          return (
-            <div key={status} className="bg-slate-100 rounded-3xl p-4 min-w-[260px] border-2 border-slate-200" style={{maxHeight:'calc(100vh-280px)',overflowY:'auto'}}>
-              <h3 className="font-black text-slate-700 mb-4 flex justify-between items-center text-sm">
-                {status} <span className="bg-white px-3 py-1 rounded-xl text-sm shadow-sm">{list.length}</span>
-              </h3>
-              <div className="space-y-3">
-                {list.map(c => (
-                  <div key={c.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 border-l-4" style={{borderLeftColor: CHART_COLORS[idx % CHART_COLORS.length]}}>
-                    <p className="font-black text-slate-800">{c.name}</p>
-                    <p className="text-xs font-bold text-slate-400 mt-1">{c.phone}</p>
-                    {c.premium > 0 && <p className="text-xs font-black text-emerald-600 mt-2 bg-emerald-50 w-fit px-2.5 py-1 rounded-lg">{fmt(c.premium)}</p>}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {filtered.map(c => (
+              <div key={c.id} className="bg-white rounded-3xl p-6 border-2 border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all group">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 text-lg">{c.name.charAt(0)}</div>
+                  <div>
+                    <h3 className="font-black text-lg text-slate-800">{c.name}</h3>
+                    <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5 font-bold"><PhoneIcon size={11}/> {c.phone}</p>
                   </div>
-                ))}
-                {list.length === 0 && <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center text-slate-400 font-black text-sm">ไม่มีข้อมูล</div>}
+                </div>
+                <div className="space-y-2 mb-5 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-sm">
+                  <div className="flex justify-between"><span className="text-slate-400 font-bold text-xs uppercase tracking-widest">สถานะ</span><span className="font-black text-slate-700">{c.status}</span></div>
+                  <div className="flex justify-between border-t border-slate-200 pt-2"><span className="text-slate-400 font-bold text-xs uppercase tracking-widest">AI Score</span><span className="font-black text-blue-600">{c.ai_score || 0}/100</span></div>
+                </div>
+                <button onClick={() => setSelected(c)} className="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-black rounded-2xl border-2 border-slate-200 hover:border-blue-300 flex items-center justify-center gap-2 text-sm transition">
+                  ดู / แก้ไขข้อมูล <ChevronRightIcon size={16}/>
+                </button>
               </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── ANALYTICS ────────────────────────────────────────────
-function AnalyticsView({ customers }) {
-  const now = new Date();
-  const cm = now.getMonth(), cy = now.getFullYear();
-  const closed = customers.filter(c => c.status === 'ปิดการขาย');
-  const closedMonth = closed.filter(c => c.closedDate && new Date(c.closedDate).getMonth()===cm && new Date(c.closedDate).getFullYear()===cy);
-  const closedYear = closed.filter(c => c.closedDate && new Date(c.closedDate).getFullYear()===cy);
-  const revMonth = closedMonth.reduce((a,c) => a+Number(c.premium||0), 0);
-  const revYear = closedYear.reduce((a,c) => a+Number(c.premium||0), 0);
-  const convRate = customers.length ? Math.round((closed.length / customers.length) * 100) : 0;
-
-  const mNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  const monthly = mNames.map((name, i) => ({
-    name, revenue: closedYear.filter(c => new Date(c.closedDate).getMonth()===i).reduce((a,c)=>a+Number(c.premium||0),0)
-  }));
-
-  const kpis = [
-    { title: 'รายได้เดือนนี้', val: fmt(revMonth), color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-    { title: 'รายได้ทั้งปี', val: fmt(revYear), color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
-    { title: 'เคสปิด (เดือนนี้)', val: closedMonth.length + ' เคส', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
-    { title: 'Conversion Rate', val: convRate + '%', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' },
-  ];
-
-  return (
-    <div className="space-y-8 fade-in">
-      <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3"><TrendingUpIcon className="text-pink-500" size={32}/> Analytics & KPI</h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {kpis.map((k,i) => (
-          <div key={i} className={"p-5 rounded-2xl border-2 " + k.border + " " + k.bg + " shadow-sm"}>
-            <p className="text-[10px] font-black text-slate-500 mb-2 uppercase tracking-widest">{k.title}</p>
-            <h3 className={"text-xl font-black " + k.color}>{k.val}</h3>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100" style={{height:'320px'}}>
-          <h3 className="font-black text-slate-800 mb-4">รายได้รายเดือน</h3>
-          <ResponsiveContainer width="100%" height="85%">
-            <AreaChart data={monthly}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill:'#94a3b8',fontWeight:'700',fontSize:11}}/>
-              <RechartsTooltip contentStyle={{borderRadius:'16px',border:'none',fontWeight:'bold'}} formatter={v=>[fmt(v),'รายได้']}/>
-              <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={3} fill="#3b82f620"/>
-            </AreaChart>
-          </ResponsiveContainer>
+          {filtered.length === 0 && (
+            <div className="bg-white p-16 rounded-3xl text-center border-2 border-slate-100">
+              <DatabaseIcon size={64} className="mx-auto text-slate-200 mb-4"/>
+              <h3 className="text-2xl font-black text-slate-500">ไม่พบข้อมูลลูกค้า</h3>
+            </div>
+          )}
+          {selected && <CustomerModal customer={selected} onClose={() => setSelected(null)} onSave={updateCustomer} onDelete={deleteCustomer}/>}
         </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100" style={{height:'320px'}}>
-          <h3 className="font-black text-slate-800 mb-4">ลูกค้าในแต่ละขั้นตอน</h3>
-          <ResponsiveContainer width="100%" height="85%">
-            <BarChart data={STATUS_LIST.map(s=>({name:s,count:customers.filter(c=>c.status===s).length}))}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill:'#94a3b8',fontWeight:'700',fontSize:10}}/>
-              <RechartsTooltip contentStyle={{borderRadius:'16px',border:'none',fontWeight:'bold'}}/>
-              <Bar dataKey="count" radius={[10,10,0,0]}>{STATUS_LIST.map((_,i)=><Cell key={i} fill={CHART_COLORS[i%CHART_COLORS.length]}/>)}</Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── AI ASSISTANT ─────────────────────────────────────────
-function AIAssistantView({ user, customers }) {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const endRef = useRef(null);
-
-  const sys = 'คุณเป็น AI Assistant ตัวแทนประกัน "' + user.name + '" ทีม ' + user.team + '. ลูกค้าในมือ: ' + customers.length + ' ราย. ตอบภาษาไทย กระชับ นำไปปฏิบัติได้จริง เหมือนโค้ชการขายมืออาชีพ';
-  const quick = ["สคริปต์โทรหาลูกค้าใหม่","เทคนิค Follow-up ลูกค้า","วิธีนำเสนอประกันโดยไม่กดดัน","จุดเด่นประกันสะสมทรัพย์"];
-
-  useEffect(() => { endRef.current && endRef.current.scrollIntoView({behavior:'smooth'}); }, [messages]);
-
-  const send = async (txt) => {
-    const text = txt || input.trim();
-    if (!text || loading) return;
-    setInput('');
-    const newMsgs = [...messages, {role:'user',content:text}];
-    setMessages(newMsgs);
-    setLoading(true);
-    try {
-      const reply = await callClaude(newMsgs.map(m=>({role:m.role,content:m.content})), sys);
-      setMessages(function(p){ return [...p, {role:'assistant',content:reply}]; });
-    } catch(e) {
-      setMessages(function(p){ return [...p, {role:'assistant',content:'❌ ไม่สามารถเชื่อมต่อได้'}]; });
+      );
     }
-    setLoading(false);
-  };
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-4 fade-in">
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg" style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)'}}>
-          <BrainIcon className="text-white" size={24}/>
-        </div>
-        <div>
-          <h2 className="text-2xl font-black text-slate-800">AI Sales Assistant</h2>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">ขับเคลื่อนด้วย Claude AI</p>
-        </div>
-      </div>
-      <div className="rounded-3xl overflow-hidden shadow-2xl" style={{background:'linear-gradient(135deg,#0f172a,#1e1b4b)'}}>
-        <div className="cscroll p-6 space-y-4" style={{height:'420px',overflowY:'auto'}}>
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center gap-4">
-              <BrainIcon size={48} className="text-indigo-400 opacity-40"/>
-              <p className="text-white font-black text-xl">สวัสดีคุณ {user.name}! 👋</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-xl">
-                {quick.map((p, i) => (
-                  <button key={i} onClick={() => send(p)} className="text-left p-3 rounded-2xl text-indigo-200 text-xs font-bold border" style={{background:'rgba(99,102,241,.1)',borderColor:'rgba(99,102,241,.3)'}}>
-                    {p}
-                  </button>
-                ))}
+    function CustomerModal({ customer, onClose, onSave, onDelete }) {
+      const [f, setF] = useState(Object.assign({}, customer));
+      const [aiLoading, setAiLoading] = useState(false);
+      const [aiInsight, setAiInsight] = useState(null);
+      const [aiError, setAiError] = useState(null);
+
+      const ch = (e) => {
+        const name = e.target.name;
+        const value = e.target.value;
+        const type = e.target.type;
+        const checked = e.target.checked;
+        const v = type==='checkbox' ? checked : value;
+        if (name==='dob') setF(function(p){ return Object.assign({}, p, {dob: v, age: calcAge(v)}); });
+        else setF(function(p){ return Object.assign({}, p, {[name]: v}); });
+      };
+
+      const save = () => {
+        const up = Object.assign({}, f);
+        if (up.status==='ปิดการขาย' && customer.status!=='ปิดการขาย') up.closedDate = today();
+        up.lastContact = today();
+        onSave(up);
+        onClose();
+      };
+
+      const genAI = async () => {
+        setAiLoading(true); setAiInsight(null); setAiError(null);
+        try {
+          const sys = 'คุณเป็น AI ที่ปรึกษาการขายประกันชีวิต ตอบภาษาไทยกระชับ 3-4 ประโยค';
+          const msg = 'วิเคราะห์ลูกค้า: ชื่อ ' + f.name + ', อายุ ' + f.age + ', อาชีพ ' + (f.occupation||'ไม่ระบุ') + ', รายได้ ' + f.income + ', สถานะ ' + f.status + ', แผนที่สนใจ ' + (f.interestedPlan||'ไม่ระบุ');
+          const r = await callClaude([{role:'user',content:msg}], sys);
+          setAiInsight(r);
+        } catch(e) { setAiError("ไม่สามารถเชื่อมต่อ AI ได้"); }
+        setAiLoading(false);
+      };
+
+      const inp = "w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl bg-slate-50 outline-none focus:border-blue-500 focus:bg-white font-bold text-slate-800 transition text-sm";
+
+      return (
+        <div className="fixed inset-0 flex items-center justify-center z-[100] p-4" style={{background:'rgba(15,23,42,.7)',backdropFilter:'blur(8px)'}}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl flex flex-col" style={{maxHeight:'90vh',overflow:'hidden'}}>
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+              <h2 className="text-2xl font-black text-slate-800">{f.name}</h2>
+              <button onClick={onClose} className="text-slate-400 hover:bg-slate-100 p-2.5 rounded-xl"><XIcon size={20}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-5 cscroll">
+              <div className="grid grid-cols-3 gap-4">
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">สถานะ</label><select name="status" value={f.status} onChange={ch} className="w-full px-3 py-2.5 border-2 border-blue-200 rounded-xl bg-blue-50 font-black text-blue-800 outline-none text-sm">{STATUS_LIST.map(s=><option key={s}>{s}</option>)}</select></div>
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เบี้ย (บาท)</label><input type="number" name="premium" value={f.premium} onChange={ch} className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 font-black text-sm"/></div>
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">วันนัด</label><input type="date" name="appointmentDate" value={f.appointmentDate||''} onChange={ch} className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 font-black text-sm"/></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">ชื่อ</label><input type="text" name="name" value={f.name} onChange={ch} className={inp}/></div>
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เบอร์โทร</label><input type="text" name="phone" value={f.phone} onChange={ch} className={inp}/></div>
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">อาชีพ</label><input type="text" name="occupation" value={f.occupation||''} onChange={ch} className={inp}/></div>
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={f.interestedPlan||''} onChange={ch} className={inp}/></div>
+                <div className="col-span-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">หมายเหตุ</label><textarea name="note" value={f.note||''} onChange={ch} rows={2} className={inp}/></div>
+              </div>
+              <div className="rounded-2xl p-5 text-white" style={{background:'linear-gradient(135deg,#1e1b4b,#4c1d95)'}}>
+                <h3 className="font-black flex items-center gap-2 mb-3"><BrainIcon size={18}/> AI วิเคราะห์</h3>
+                <div className="bg-white/10 rounded-xl p-4 min-h-[80px] flex items-center justify-center mb-3">
+                  {aiLoading ? <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full spin"></div>
+                  : aiError ? <p className="text-red-300 text-sm font-bold">{aiError}</p>
+                  : aiInsight ? <p className="text-indigo-50 font-bold leading-relaxed text-sm whitespace-pre-wrap">{aiInsight}</p>
+                  : <p className="text-indigo-300 text-sm font-bold text-center">กดปุ่มด้านล่างเพื่อวิเคราะห์</p>}
+                </div>
+                <button onClick={genAI} disabled={aiLoading} className="w-full bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 text-white font-black py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm">
+                  <BrainIcon size={15}/> วิเคราะห์ลูกค้า
+                </button>
               </div>
             </div>
-          )}
-          {messages.map((m, i) => (
-            <div key={i} className={"flex gap-3 " + (m.role==='user' ? 'flex-row-reverse' : '')}>
-              <div className={"w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-black text-sm text-white " + (m.role==='user' ? 'bg-blue-500' : '')} style={m.role!=='user' ? {background:'linear-gradient(135deg,#4f46e5,#7c3aed)'} : {}}>
-                {m.role==='user' ? user.name.charAt(0) : <BotIcon size={14}/>}
-              </div>
-              <div className={"max-w-[80%] p-4 rounded-2xl text-sm font-bold leading-relaxed whitespace-pre-wrap " + (m.role==='user' ? 'bg-blue-600 text-white' : 'text-indigo-50 border')} style={m.role!=='user' ? {background:'rgba(255,255,255,.08)',borderColor:'rgba(255,255,255,.1)'} : {}}>
-                {m.content}
+            <div className="px-5 py-4 border-t border-slate-100 flex justify-between">
+              <button onClick={() => { if(window.confirm('แน่ใจหรือไม่?')) { onDelete(customer.id); onClose(); }}} className="px-4 py-2.5 text-red-500 hover:bg-red-50 rounded-xl font-black flex items-center gap-1.5 text-sm"><Trash2Icon size={15}/> ลบ</button>
+              <div className="flex gap-3">
+                <button onClick={onClose} className="px-5 py-2.5 text-slate-500 hover:bg-slate-100 rounded-xl font-black text-sm">ปิด</button>
+                <button onClick={save} className="px-8 py-2.5 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 shadow-lg text-sm">บันทึก</button>
               </div>
             </div>
-          ))}
-          {loading && (
-            <div className="flex gap-3 items-start">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)'}}><BotIcon size={14}/></div>
-              <div className="p-4 rounded-2xl border flex items-center gap-3" style={{background:'rgba(255,255,255,.08)',borderColor:'rgba(255,255,255,.1)'}}>
-                <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full spin"></div>
-                <span className="text-indigo-300 font-bold text-sm">กำลังคิด...</span>
-              </div>
-            </div>
-          )}
-          <div ref={endRef}/>
-        </div>
-        <div className="border-t p-4" style={{borderColor:'rgba(99,102,241,.2)',background:'rgba(0,0,0,.2)'}}>
-          <div className="flex gap-3">
-            <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==='Enter' && !e.shiftKey && send()} placeholder="ถามเกี่ยวกับการขายประกัน..." disabled={loading}
-              className="flex-1 px-5 py-3.5 rounded-2xl outline-none font-bold text-sm text-white placeholder-indigo-400 border" style={{background:'rgba(255,255,255,.08)',borderColor:'rgba(255,255,255,.15)'}}/>
-            <button onClick={() => send()} disabled={loading||!input.trim()} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-6 py-3.5 rounded-2xl font-black">
-              <SendIcon size={16}/>
-            </button>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
+      );
+    }
 
-// ─── RANKING ──────────────────────────────────────────────
-function RankingView({ users, customers, currentUser }) {
-  const ranking = users.filter(u => u.role==='agent' && u.team===currentUser.team).map(u => ({
-    id: u.id, name: u.name,
-    rev: customers.filter(c=>c.agent_id===u.id&&c.status==='ปิดการขาย').reduce((a,c)=>a+Number(c.premium||0),0),
-    cases: customers.filter(c=>c.agent_id===u.id&&c.status==='ปิดการขาย').length
-  })).sort((a,b) => b.rev-a.rev);
-
-  return (
-    <div className="max-w-3xl mx-auto space-y-8 fade-in">
-      <div className="text-center">
-        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl" style={{background:'linear-gradient(135deg,#fbbf24,#f97316)'}}>
-          <TrophyIcon size={40} className="text-white"/>
-        </div>
-        <h2 className="text-3xl font-black text-slate-800">Team Ranking</h2>
-        <p className="text-slate-500 font-bold mt-1 text-sm bg-slate-100 inline-block px-4 py-1 rounded-full">ทีม: {currentUser.team}</p>
-      </div>
-      <div className="bg-white rounded-3xl shadow-xl p-6 space-y-3">
-        {ranking.length === 0 && <p className="text-center py-12 text-slate-400 font-black">ยังไม่มีสมาชิกในทีม</p>}
-        {ranking.map((u, idx) => (
-          <div key={u.id} className={"flex items-center justify-between p-5 rounded-2xl border-2 " + (idx===0 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200' : 'bg-slate-50 border-slate-100')}>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl bg-white border-2 border-slate-200">
-                {['🥇','🥈','🥉'][idx] || idx+1}
-              </div>
-              <div>
-                <p className="font-black text-slate-800 text-lg">{u.name} {u.id===currentUser.id && <span className="text-[9px] bg-blue-600 text-white px-2.5 py-1 rounded-full ml-2">คุณ</span>}</p>
-                <p className="text-xs font-bold text-slate-400 mt-0.5">{u.cases} เคส</p>
-              </div>
-            </div>
-            <h3 className={"text-2xl font-black " + (idx===0 ? 'text-orange-600' : 'text-slate-700')}>{fmt(u.rev)}</h3>
+    function PipelineView({ customers }) {
+      return (
+        <div className="space-y-6 fade-in">
+          <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3"><FilterIcon className="text-purple-500" size={32}/> Sales Pipeline</h2>
+          <div className="flex gap-4 overflow-x-auto pb-4 cscroll items-start">
+            {STATUS_LIST.map((status, idx) => {
+              const list = customers.filter(c => c.status === status);
+              return (
+                <div key={status} className="bg-slate-100 rounded-3xl p-4 min-w-[260px] border-2 border-slate-200" style={{maxHeight:'calc(100vh-280px)',overflowY:'auto'}}>
+                  <h3 className="font-black text-slate-700 mb-4 flex justify-between items-center text-sm">
+                    {status} <span className="bg-white px-3 py-1 rounded-xl text-sm shadow-sm">{list.length}</span>
+                  </h3>
+                  <div className="space-y-3">
+                    {list.map(c => (
+                      <div key={c.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 border-l-4" style={{borderLeftColor: CHART_COLORS[idx % CHART_COLORS.length]}}>
+                        <p className="font-black text-slate-800">{c.name}</p>
+                        <p className="text-xs font-bold text-slate-400 mt-1">{c.phone}</p>
+                        {c.premium > 0 && <p className="text-xs font-black text-emerald-600 mt-2 bg-emerald-50 w-fit px-2.5 py-1 rounded-lg">{fmt(c.premium)}</p>}
+                      </div>
+                    ))}
+                    {list.length === 0 && <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center text-slate-400 font-black text-sm">ไม่มีข้อมูล</div>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── SETTINGS ─────────────────────────────────────────────
-function SettingsView({ user, setUsers, users }) {
-  const [f, setF] = useState({ name:user.name, email:user.email, password:user.password, team:user.team });
-  const [saved, setSaved] = useState(false);
-
-  const submit = (e) => {
-    e.preventDefault();
-    setUsers(users.map(u => u.id===user.id ? Object.assign({}, u, f) : u));
-    setSaved(true); setTimeout(()=>setSaved(false),3000);
-  };
-
-  return (
-    <div className="max-w-xl mx-auto space-y-6 pt-4 fade-in">
-      <div className="text-center">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center font-black text-white text-3xl shadow-xl mx-auto mb-4" style={{background:'linear-gradient(135deg,#3b82f6,#6366f1)'}}>
-          {user.name.charAt(0)}
         </div>
-        <h2 className="text-2xl font-black text-slate-800">ตั้งค่าบัญชี</h2>
-      </div>
-      <form onSubmit={submit} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 lg:p-8 space-y-5">
-        {[{label:'อีเมล',key:'email',type:'email'},{label:'ชื่อ - นามสกุล',key:'name',type:'text'},{label:'ชื่อทีม',key:'team',type:'text'}].map(field => (
-          <div key={field.key}>
-            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">{field.label}</label>
-            <input required type={field.type} value={f[field.key]} onChange={e=>setF(Object.assign({},f,{[field.key]:e.target.value}))} className="w-full px-5 py-3.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 outline-none font-bold text-slate-800 transition"/>
+      );
+    }
+
+    function AnalyticsView({ customers }) {
+      const now = new Date();
+      const cm = now.getMonth(), cy = now.getFullYear();
+      const closed = customers.filter(c => c.status === 'ปิดการขาย');
+      const closedMonth = closed.filter(c => c.closedDate && new Date(c.closedDate).getMonth()===cm && new Date(c.closedDate).getFullYear()===cy);
+      const closedYear = closed.filter(c => c.closedDate && new Date(c.closedDate).getFullYear()===cy);
+      const revMonth = closedMonth.reduce((a,c) => a+Number(c.premium||0), 0);
+      const revYear = closedYear.reduce((a,c) => a+Number(c.premium||0), 0);
+      const convRate = customers.length ? Math.round((closed.length / customers.length) * 100) : 0;
+
+      const mNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      const monthly = mNames.map((name, i) => ({
+        name, revenue: closedYear.filter(c => new Date(c.closedDate).getMonth()===i).reduce((a,c)=>a+Number(c.premium||0),0)
+      }));
+
+      const kpis = [
+        { title: 'รายได้เดือนนี้', val: fmt(revMonth), color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+        { title: 'รายได้ทั้งปี', val: fmt(revYear), color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
+        { title: 'เคสปิด (เดือนนี้)', val: closedMonth.length + ' เคส', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
+        { title: 'Conversion Rate', val: convRate + '%', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' },
+      ];
+
+      return (
+        <div className="space-y-8 fade-in">
+          <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3"><TrendingUpIcon className="text-pink-500" size={32}/> Analytics & KPI</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {kpis.map((k,i) => (
+              <div key={i} className={"p-5 rounded-2xl border-2 " + k.border + " " + k.bg + " shadow-sm"}>
+                <p className="text-[10px] font-black text-slate-500 mb-2 uppercase tracking-widest">{k.title}</p>
+                <h3 className={"text-xl font-black " + k.color}>{k.val}</h3>
+              </div>
+            ))}
           </div>
-        ))}
-        <div>
-          <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">รหัสผ่าน</label>
-          <input required type="password" value={f.password} onChange={e=>setF(Object.assign({},f,{password:e.target.value}))} className="w-full px-5 py-3.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 outline-none font-bold text-slate-800 transition"/>
-        </div>
-        <button type="submit" className={"w-full py-4 font-black text-lg rounded-2xl transition-all hover:-translate-y-0.5 shadow-xl flex items-center justify-center gap-2 " + (saved ? 'bg-emerald-500 text-white' : 'text-white')} style={!saved ? {background:'#1e293b'} : {}}>
-          {saved ? <span className="flex items-center gap-2"><CheckCircle2Icon size={20}/> บันทึกสำเร็จ!</span> : <span className="flex items-center gap-2"><SaveIcon size={20}/> บันทึก</span>}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-// ─── ADMIN ────────────────────────────────────────────────
-function AdminHome({ users, customers }) {
-  const agents = users.filter(u => u.role==='agent');
-  const closed = customers.filter(c => c.status==='ปิดการขาย');
-  const totalRev = closed.reduce((a,c)=>a+Number(c.premium||0),0);
-  const stats = agents.map(a => ({
-    name: a.name, team: a.team,
-    rev: customers.filter(c=>c.agent_id===a.id&&c.status==='ปิดการขาย').reduce((acc,c)=>acc+Number(c.premium||0),0),
-    leads: customers.filter(c=>c.agent_id===a.id).length
-  })).sort((a,b)=>b.rev-a.rev);
-
-  return (
-    <div className="space-y-8 fade-in">
-      <div className="rounded-3xl p-8 text-white shadow-2xl" style={{background:'linear-gradient(135deg,#0f172a,#4c1d95,#0f172a)'}}>
-        <h2 className="text-3xl font-black mb-6">Admin Dashboard</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-          {[
-            { label: 'ยอดขายรวม', val: fmt(totalRev), color: 'text-amber-400' },
-            { label: 'ตัวแทนในระบบ', val: agents.length + ' คน', color: 'text-blue-300' },
-            { label: 'ฐานลูกค้า', val: customers.length + ' ราย', color: 'text-purple-300' },
-            { label: 'ปิดการขาย', val: closed.length + ' เคส', color: 'text-emerald-400' },
-          ].map((item, i) => (
-            <div key={i} className="p-5 rounded-2xl border border-white/20" style={{background:'rgba(255,255,255,.1)'}}>
-              <p className="text-purple-200 text-xs font-black mb-1 uppercase tracking-widest">{item.label}</p>
-              <h3 className={"text-2xl font-black " + item.color}>{item.val}</h3>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100" style={{height:'320px'}}>
+              <h3 className="font-black text-slate-800 mb-4">รายได้รายเดือน</h3>
+              <ResponsiveContainer width="100%" height="85%">
+                <AreaChart data={monthly}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill:'#94a3b8',fontWeight:'700',fontSize:11}}/>
+                  <RechartsTooltip contentStyle={{borderRadius:'16px',border:'none',fontWeight:'bold'}} formatter={v=>[fmt(v),'รายได้']}/>
+                  <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={3} fill="#3b82f620"/>
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-          ))}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100" style={{height:'320px'}}>
+              <h3 className="font-black text-slate-800 mb-4">ลูกค้าในแต่ละขั้นตอน</h3>
+              <ResponsiveContainer width="100%" height="85%">
+                <BarChart data={STATUS_LIST.map(s=>({name:s,count:customers.filter(c=>c.status===s).length}))}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill:'#94a3b8',fontWeight:'700',fontSize:10}}/>
+                  <RechartsTooltip contentStyle={{borderRadius:'16px',border:'none',fontWeight:'bold'}}/>
+                  <Bar dataKey="count" radius={[10,10,0,0]}>{STATUS_LIST.map((_,i)=><Cell key={i} fill={CHART_COLORS[i%CHART_COLORS.length]}/>)}</Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
-        <h3 className="font-black text-slate-800 text-xl mb-5 flex items-center gap-2"><UsersIcon className="text-blue-500" size={22}/> ตัวแทนทั้งหมด</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead><tr className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest"><th className="px-4 py-3 rounded-l-xl">ชื่อ</th><th className="px-4 py-3">ทีม</th><th className="px-4 py-3">Lead</th><th className="px-4 py-3 rounded-r-xl">ยอดขาย</th></tr></thead>
-            <tbody className="divide-y divide-slate-50">
-              {stats.map((a,i) => (
-                <tr key={i} className="hover:bg-slate-50/50">
-                  <td className="px-4 py-3.5 font-black text-slate-800">{a.name}</td>
-                  <td className="px-4 py-3.5"><span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-lg font-black text-xs">{a.team}</span></td>
-                  <td className="px-4 py-3.5 font-black text-slate-600">{a.leads}</td>
-                  <td className="px-4 py-3.5 font-black text-emerald-600">{fmt(a.rev)}</td>
-                </tr>
+      );
+    }
+
+    function AIAssistantView({ user, customers }) {
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState('');
+      const [loading, setLoading] = useState(false);
+      const endRef = useRef(null);
+
+      const sys = 'คุณเป็น AI Assistant ตัวแทนประกัน "' + user.name + '" ทีม ' + user.team + '. ลูกค้าในมือ: ' + customers.length + ' ราย. ตอบภาษาไทย กระชับ นำไปปฏิบัติได้จริง เหมือนโค้ชการขายมืออาชีพ';
+      const quick = ["สคริปต์โทรหาลูกค้าใหม่","เทคนิค Follow-up ลูกค้า","วิธีนำเสนอประกันโดยไม่กดดัน","จุดเด่นประกันสะสมทรัพย์"];
+
+      useEffect(() => { endRef.current && endRef.current.scrollIntoView({behavior:'smooth'}); }, [messages]);
+
+      const send = async (txt) => {
+        const text = txt || input.trim();
+        if (!text || loading) return;
+        setInput('');
+        const newMsgs = [...messages, {role:'user',content:text}];
+        setMessages(newMsgs);
+        setLoading(true);
+        try {
+          const reply = await callClaude(newMsgs.map(m=>({role:m.role,content:m.content})), sys);
+          setMessages(function(p){ return [...p, {role:'assistant',content:reply}]; });
+        } catch(e) {
+          setMessages(function(p){ return [...p, {role:'assistant',content:'❌ ไม่สามารถเชื่อมต่อได้'}]; });
+        }
+        setLoading(false);
+      };
+
+      return (
+        <div className="max-w-4xl mx-auto space-y-4 fade-in">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg" style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)'}}>
+              <BrainIcon className="text-white" size={24}/>
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-800">AI Sales Assistant</h2>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">ขับเคลื่อนด้วย Claude AI</p>
+            </div>
+          </div>
+          <div className="rounded-3xl overflow-hidden shadow-2xl" style={{background:'linear-gradient(135deg,#0f172a,#1e1b4b)'}}>
+            <div className="cscroll p-6 space-y-4" style={{height:'420px',overflowY:'auto'}}>
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center gap-4">
+                  <BrainIcon size={48} className="text-indigo-400 opacity-40"/>
+                  <p className="text-white font-black text-xl">สวัสดีคุณ {user.name}! 👋</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-xl">
+                    {quick.map((p, i) => (
+                      <button key={i} onClick={() => send(p)} className="text-left p-3 rounded-2xl text-indigo-200 text-xs font-bold border" style={{background:'rgba(99,102,241,.1)',borderColor:'rgba(99,102,241,.3)'}}>
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {messages.map((m, i) => (
+                <div key={i} className={"flex gap-3 " + (m.role==='user' ? 'flex-row-reverse' : '')}>
+                  <div className={"w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-black text-sm text-white " + (m.role==='user' ? 'bg-blue-500' : '')} style={m.role!=='user' ? {background:'linear-gradient(135deg,#4f46e5,#7c3aed)'} : {}}>
+                    {m.role==='user' ? user.name.charAt(0) : <BotIcon size={14}/>}
+                  </div>
+                  <div className={"max-w-[80%] p-4 rounded-2xl text-sm font-bold leading-relaxed whitespace-pre-wrap " + (m.role==='user' ? 'bg-blue-600 text-white' : 'text-indigo-50 border')} style={m.role!=='user' ? {background:'rgba(255,255,255,.08)',borderColor:'rgba(255,255,255,.1)'} : {}}>
+                    {m.content}
+                  </div>
+                </div>
               ))}
-              {agents.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold">ยังไม่มีตัวแทน</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── APP SHELL ────────────────────────────────────────────
-function AppShell({ currentUser, users, customers, tasks, addCustomer, updateCustomer, deleteCustomer, addTask, toggleTask, removeTask, setUsers, currentRoute, setCurrentRoute, setSidebarOpen, isSidebarOpen, onLogout }) {
-  const agentNav = [
-    { route:'home', icon:HomeIcon, label:'แดชบอร์ด', color:'text-blue-600', bg:'bg-blue-50 border-blue-200' },
-    { route:'add-lead', icon:UserPlusIcon, label:'เพิ่ม Lead', color:'text-orange-500', bg:'bg-orange-50 border-orange-200' },
-    { route:'customers', icon:UsersIcon, label:'ฐานลูกค้า', color:'text-emerald-500', bg:'bg-emerald-50 border-emerald-200' },
-    { route:'pipeline', icon:FilterIcon, label:'Pipeline', color:'text-purple-500', bg:'bg-purple-50 border-purple-200' },
-    { route:'analytics', icon:TrendingUpIcon, label:'Analytics', color:'text-pink-500', bg:'bg-pink-50 border-pink-200' },
-    { route:'ai-assistant', icon:BrainIcon, label:'AI Assistant', color:'text-indigo-500', bg:'bg-indigo-50 border-indigo-200' },
-    { route:'ranking', icon:TrophyIcon, label:'Team Ranking', color:'text-yellow-500', bg:'bg-yellow-50 border-yellow-200' },
-    { route:'settings', icon:SettingsIcon, label:'ตั้งค่า', color:'text-slate-600', bg:'bg-slate-100 border-slate-200' },
-  ];
-  const adminNav = [
-    { route:'home', icon:HomeIcon, label:'ภาพรวม', color:'text-indigo-600', bg:'bg-indigo-50 border-indigo-200' },
-    { route:'settings', icon:SettingsIcon, label:'ตั้งค่า', color:'text-slate-600', bg:'bg-slate-100 border-slate-200' },
-  ];
-  const navItems = currentUser.role === 'admin' ? adminNav : agentNav;
-  const label = (navItems.find(n=>n.route===currentRoute) || {label:'หน้าหลัก'}).label;
-
-  return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
-      {isSidebarOpen && <div className="fixed inset-0 z-40 lg:hidden" style={{background:'rgba(15,23,42,.5)'}} onClick={()=>setSidebarOpen(false)}/>}
-      <aside className={"fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col shadow-2xl lg:shadow-none transition-transform duration-300 " + (isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0')}>
-        <div className="h-16 flex items-center px-5 border-b border-slate-100 gap-3">
-          <div className="p-2 rounded-2xl shadow-lg" style={{background:'linear-gradient(135deg,#2563eb,#4f46e5)'}}><ActivityIcon className="text-white" size={20}/></div>
-          <span className="text-lg font-black text-transparent bg-clip-text" style={{backgroundImage:'linear-gradient(90deg,#2563eb,#4f46e5)'}}>Nova CRM</span>
-          <button className="ml-auto lg:hidden text-slate-400 hover:bg-slate-100 p-2 rounded-xl" onClick={()=>setSidebarOpen(false)}><XIcon size={17}/></button>
-        </div>
-        <nav className="flex-1 overflow-y-auto cscroll p-3 space-y-0.5">
-          {navItems.map(item => (
-            <MenuLink key={item.route} icon={item.icon} label={item.label} active={currentRoute===item.route}
-              onClick={()=>{setCurrentRoute(item.route);setSidebarOpen(false);}} color={item.color} bg={item.bg}/>
-          ))}
-        </nav>
-        <div className="p-4 bg-slate-50 border-t border-slate-200">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-black text-white text-base shadow-md" style={{background:'linear-gradient(135deg,#3b82f6,#6366f1)'}}>{currentUser.name.charAt(0)}</div>
-            <div className="truncate flex-1 min-w-0">
-              <p className="text-sm font-black text-slate-800 truncate">{currentUser.name}</p>
-              <p className="text-[9px] font-bold text-slate-500 bg-slate-200 inline-block px-2 py-0.5 rounded-md mt-0.5 uppercase tracking-widest">{currentUser.role==='admin'?'ADMIN':currentUser.team}</p>
+              {loading && (
+                <div className="flex gap-3 items-start">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)'}}><BotIcon size={14}/></div>
+                  <div className="p-4 rounded-2xl border flex items-center gap-3" style={{background:'rgba(255,255,255,.08)',borderColor:'rgba(255,255,255,.1)'}}>
+                    <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full spin"></div>
+                    <span className="text-indigo-300 font-bold text-sm">กำลังคิด...</span>
+                  </div>
+                </div>
+              )}
+              <div ref={endRef}/>
+            </div>
+            <div className="border-t p-4" style={{borderColor:'rgba(99,102,241,.2)',background:'rgba(0,0,0,.2)'}}>
+              <div className="flex gap-3">
+                <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==='Enter' && !e.shiftKey && send()} placeholder="ถามเกี่ยวกับการขายประกัน..." disabled={loading}
+                  className="flex-1 px-5 py-3.5 rounded-2xl outline-none font-bold text-sm text-white placeholder-indigo-400 border" style={{background:'rgba(255,255,255,.08)',borderColor:'rgba(255,255,255,.15)'}}/>
+                <button onClick={() => send()} disabled={loading||!input.trim()} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-6 py-3.5 rounded-2xl font-black">
+                  <SendIcon size={16}/>
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </aside>
-      <main className="flex-1 overflow-auto bg-slate-50/50">
-        <header className="h-14 bg-white/80 border-b border-slate-200 sticky top-0 z-30 px-4 lg:px-8 flex items-center justify-between shadow-sm" style={{backdropFilter:'blur(12px)'}}>
-          <div className="flex items-center gap-3">
-            <button className="lg:hidden p-2 bg-white border-2 border-slate-200 rounded-xl shadow-sm" onClick={()=>setSidebarOpen(true)}><MenuIcon size={18}/></button>
-            <h1 className="text-base font-black text-slate-800 uppercase tracking-tight">{label}</h1>
+      );
+    }
+
+    function RankingView({ users, customers, currentUser }) {
+      const ranking = users.filter(u => u.role==='agent' && u.team===currentUser.team).map(u => ({
+        id: u.id, name: u.name,
+        rev: customers.filter(c=>c.agent_id===u.id&&c.status==='ปิดการขาย').reduce((a,c)=>a+Number(c.premium||0),0),
+        cases: customers.filter(c=>c.agent_id===u.id&&c.status==='ปิดการขาย').length
+      })).sort((a,b) => b.rev-a.rev);
+
+      return (
+        <div className="max-w-3xl mx-auto space-y-8 fade-in">
+          <div className="text-center">
+            <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl" style={{background:'linear-gradient(135deg,#fbbf24,#f97316)'}}>
+              <TrophyIcon size={40} className="text-white"/>
+            </div>
+            <h2 className="text-3xl font-black text-slate-800">Team Ranking</h2>
+            <p className="text-slate-500 font-bold mt-1 text-sm bg-slate-100 inline-block px-4 py-1 rounded-full">ทีม: {currentUser.team}</p>
           </div>
-          <button onClick={onLogout} title="ออกจากระบบ" className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-xl border-2 border-slate-200 transition">
-            <LogOutIcon size={16}/>
-          </button>
-        </header>
-        <div className="p-4 lg:p-8 max-w-[1600px] mx-auto pb-16">
-          {currentUser.role === 'admin' ? (
-            <div>
-              {currentRoute==='home' && <AdminHome users={users} customers={customers}/>}
-              {currentRoute==='settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users}/>}
-            </div>
-          ) : (
-            <div>
-              {currentRoute==='home' && <AgentHome user={currentUser} customers={customers} tasks={tasks} addTask={addTask} toggleTask={toggleTask} removeTask={removeTask} setUsers={setUsers} users={users} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer}/>}
-              {currentRoute==='add-lead' && <AddLead onAdd={addCustomer} setRoute={setCurrentRoute}/>}
-              {currentRoute==='customers' && <CustomersView user={currentUser} customers={customers} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer}/>}
-              {currentRoute==='pipeline' && <PipelineView customers={customers.filter(c=>c.agent_id===currentUser.id)}/>}
-              {currentRoute==='analytics' && <AnalyticsView customers={customers.filter(c=>c.agent_id===currentUser.id)}/>}
-              {currentRoute==='ranking' && <RankingView users={users} customers={customers} currentUser={currentUser}/>}
-              {currentRoute==='ai-assistant' && <AIAssistantView user={currentUser} customers={customers.filter(c=>c.agent_id===currentUser.id)}/>}
-              {currentRoute==='settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users}/>}
-            </div>
-          )}
+          <div className="bg-white rounded-3xl shadow-xl p-6 space-y-3">
+            {ranking.length === 0 && <p className="text-center py-12 text-slate-400 font-black">ยังไม่มีสมาชิกในทีม</p>}
+            {ranking.map((u, idx) => (
+              <div key={u.id} className={"flex items-center justify-between p-5 rounded-2xl border-2 " + (idx===0 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200' : 'bg-slate-50 border-slate-100')}>
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl bg-white border-2 border-slate-200">
+                    {['🥇','🥈','🥉'][idx] || idx+1}
+                  </div>
+                  <div>
+                    <p className="font-black text-slate-800 text-lg">{u.name} {u.id===currentUser.id && <span className="text-[9px] bg-blue-600 text-white px-2.5 py-1 rounded-full ml-2">คุณ</span>}</p>
+                    <p className="text-xs font-bold text-slate-400 mt-0.5">{u.cases} เคส</p>
+                  </div>
+                </div>
+                <h3 className={"text-2xl font-black " + (idx===0 ? 'text-orange-600' : 'text-slate-700')}>{fmt(u.rev)}</h3>
+              </div>
+            ))}
+          </div>
         </div>
-      </main>
-    </div>
-  );
-}
-
-// ─── MAIN ─────────────────────────────────────────────────
-function App() {
-  const [users, setUsers] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [currentRoute, setCurrentRoute] = useState('home');
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleAuth = (email, password, name, team, isLogin) => {
-    if (isLogin) {
-      const user = users.find(u=>u.email.toLowerCase()===email.toLowerCase()&&u.password===password);
-      if (user) { setCurrentUser(user); setCurrentRoute('home'); }
-      else alert("รหัสผ่านหรืออีเมลไม่ถูกต้อง");
-    } else {
-      if (users.find(u=>u.email.toLowerCase()===email.toLowerCase())) { alert("อีเมลนี้มีการลงทะเบียนแล้ว"); return; }
-      const role = email.toLowerCase()===ADMIN_EMAIL.toLowerCase() ? 'admin' : 'agent';
-      const newUser = { id:Date.now().toString(), name:name, email:email, password:password, team:role==='admin'?'HQ Management':team, role:role, targetRevenue:100000 };
-      setUsers(function(prev){ return [...prev, newUser]; });
-      setCurrentUser(newUser);
-      setCurrentRoute('home');
+      );
     }
-  };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setCurrentRoute('home');
-  };
+    function SettingsView({ user, setUsers, users }) {
+      const [f, setF] = useState({ name:user.name, email:user.email, password:user.password, team:user.team });
+      const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    if (currentUser) {
-      const updated = users.find(u=>u.id===currentUser.id);
-      if (updated) setCurrentUser(updated);
+      const submit = (e) => {
+        e.preventDefault();
+        setUsers(users.map(u => u.id===user.id ? Object.assign({}, u, f) : u));
+        setSaved(true); setTimeout(()=>setSaved(false),3000);
+      };
+
+      return (
+        <div className="max-w-xl mx-auto space-y-6 pt-4 fade-in">
+          <div className="text-center">
+            <div className="w-20 h-20 rounded-full flex items-center justify-center font-black text-white text-3xl shadow-xl mx-auto mb-4" style={{background:'linear-gradient(135deg,#3b82f6,#6366f1)'}}>
+              {user.name.charAt(0)}
+            </div>
+            <h2 className="text-2xl font-black text-slate-800">ตั้งค่าบัญชี</h2>
+          </div>
+          <form onSubmit={submit} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 lg:p-8 space-y-5">
+            {[{label:'อีเมล',key:'email',type:'email'},{label:'ชื่อ - นามสกุล',key:'name',type:'text'},{label:'ชื่อทีม',key:'team',type:'text'}].map(field => (
+              <div key={field.key}>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">{field.label}</label>
+                <input required type={field.type} value={f[field.key]} onChange={e=>setF(Object.assign({},f,{[field.key]:e.target.value}))} className="w-full px-5 py-3.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 outline-none font-bold text-slate-800 transition"/>
+              </div>
+            ))}
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">รหัสผ่าน</label>
+              <input required type="password" value={f.password} onChange={e=>setF(Object.assign({},f,{password:e.target.value}))} className="w-full px-5 py-3.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 outline-none font-bold text-slate-800 transition"/>
+            </div>
+            <button type="submit" className={"w-full py-4 font-black text-lg rounded-2xl transition-all hover:-translate-y-0.5 shadow-xl flex items-center justify-center gap-2 " + (saved ? 'bg-emerald-500 text-white' : 'text-white')} style={!saved ? {background:'#1e293b'} : {}}>
+              {saved ? <span className="flex items-center gap-2"><CheckCircle2Icon size={20}/> บันทึกสำเร็จ!</span> : <span className="flex items-center gap-2"><SaveIcon size={20}/> บันทึก</span>}
+            </button>
+          </form>
+        </div>
+      );
     }
-  }, [users]);
 
-  const addCustomer = (data) => setCustomers(function(prev){ return [...prev, Object.assign({}, data, {id:Date.now().toString(), agent_id:currentUser.id})]; });
-  const updateCustomer = (data) => setCustomers(function(prev){ return prev.map(c=>c.id===data.id?data:c); });
-  const deleteCustomer = (id) => setCustomers(function(prev){ return prev.filter(c=>c.id!==id); });
-  const addTask = (data) => setTasks(function(prev){ return [...prev, Object.assign({}, data, {id:Date.now().toString(), agent_id:currentUser.id})]; });
-  const toggleTask = (id) => setTasks(function(prev){ return prev.map(t=>t.id===id ? Object.assign({}, t, {status:t.status==='completed'?'pending':'completed'}) : t); });
-  const removeTask = (id) => setTasks(function(prev){ return prev.filter(t=>t.id!==id); });
+    function AdminHome({ users, customers }) {
+      const agents = users.filter(u => u.role==='agent');
+      const closed = customers.filter(c => c.status==='ปิดการขาย');
+      const totalRev = closed.reduce((a,c)=>a+Number(c.premium||0),0);
+      const stats = agents.map(a => ({
+        name: a.name, team: a.team,
+        rev: customers.filter(c=>c.agent_id===a.id&&c.status==='ปิดการขาย').reduce((acc,c)=>acc+Number(c.premium||0),0),
+        leads: customers.filter(c=>c.agent_id===a.id).length
+      })).sort((a,b)=>b.rev-a.rev);
 
-  if (!currentUser) return <AuthView onAuth={handleAuth} users={users}/>;
+      return (
+        <div className="space-y-8 fade-in">
+          <div className="rounded-3xl p-8 text-white shadow-2xl" style={{background:'linear-gradient(135deg,#0f172a,#4c1d95,#0f172a)'}}>
+            <h2 className="text-3xl font-black mb-6">Admin Dashboard</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+              {[
+                { label: 'ยอดขายรวม', val: fmt(totalRev), color: 'text-amber-400' },
+                { label: 'ตัวแทนในระบบ', val: agents.length + ' คน', color: 'text-blue-300' },
+                { label: 'ฐานลูกค้า', val: customers.length + ' ราย', color: 'text-purple-300' },
+                { label: 'ปิดการขาย', val: closed.length + ' เคส', color: 'text-emerald-400' },
+              ].map((item, i) => (
+                <div key={i} className="p-5 rounded-2xl border border-white/20" style={{background:'rgba(255,255,255,.1)'}}>
+                  <p className="text-purple-200 text-xs font-black mb-1 uppercase tracking-widest">{item.label}</p>
+                  <h3 className={"text-2xl font-black " + item.color}>{item.val}</h3>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
+            <h3 className="font-black text-slate-800 text-xl mb-5 flex items-center gap-2"><UsersIcon className="text-blue-500" size={22}/> ตัวแทนทั้งหมด</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead><tr className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest"><th className="px-4 py-3 rounded-l-xl">ชื่อ</th><th className="px-4 py-3">ทีม</th><th className="px-4 py-3">Lead</th><th className="px-4 py-3 rounded-r-xl">ยอดขาย</th></tr></thead>
+                <tbody className="divide-y divide-slate-50">
+                  {stats.map((a,i) => (
+                    <tr key={i} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3.5 font-black text-slate-800">{a.name}</td>
+                      <td className="px-4 py-3.5"><span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-lg font-black text-xs">{a.team}</span></td>
+                      <td className="px-4 py-3.5 font-black text-slate-600">{a.leads}</td>
+                      <td className="px-4 py-3.5 font-black text-emerald-600">{fmt(a.rev)}</td>
+                    </tr>
+                  ))}
+                  {agents.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-bold">ยังไม่มีตัวแทน</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
-  return (
-    <AppShell
-      currentUser={currentUser} users={users} customers={customers} tasks={tasks}
-      addCustomer={addCustomer} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer}
-      addTask={addTask} toggleTask={toggleTask} removeTask={removeTask}
-      setUsers={setUsers} currentRoute={currentRoute} setCurrentRoute={setCurrentRoute}
-      setSidebarOpen={setSidebarOpen} isSidebarOpen={isSidebarOpen}
-      onLogout={handleLogout}
-    />
-  );
-}
+    function AppShell({ currentUser, users, customers, tasks, addCustomer, updateCustomer, deleteCustomer, addTask, toggleTask, removeTask, setUsers, currentRoute, setCurrentRoute, setSidebarOpen, isSidebarOpen, onLogout }) {
+      const agentNav = [
+        { route:'home', icon:HomeIcon, label:'แดชบอร์ด', color:'text-blue-600', bg:'bg-blue-50 border-blue-200' },
+        { route:'add-lead', icon:UserPlusIcon, label:'เพิ่ม Lead', color:'text-orange-500', bg:'bg-orange-50 border-orange-200' },
+        { route:'customers', icon:UsersIcon, label:'ฐานลูกค้า', color:'text-emerald-500', bg:'bg-emerald-50 border-emerald-200' },
+        { route:'pipeline', icon:FilterIcon, label:'Pipeline', color:'text-purple-500', bg:'bg-purple-50 border-purple-200' },
+        { route:'analytics', icon:TrendingUpIcon, label:'Analytics', color:'text-pink-500', bg:'bg-pink-50 border-pink-200' },
+        { route:'ai-assistant', icon:BrainIcon, label:'AI Assistant', color:'text-indigo-500', bg:'bg-indigo-50 border-indigo-200' },
+        { route:'ranking', icon:TrophyIcon, label:'Team Ranking', color:'text-yellow-500', bg:'bg-yellow-50 border-yellow-200' },
+        { route:'settings', icon:SettingsIcon, label:'ตั้งค่า', color:'text-slate-600', bg:'bg-slate-100 border-slate-200' },
+      ];
+      const adminNav = [
+        { route:'home', icon:HomeIcon, label:'ภาพรวม', color:'text-indigo-600', bg:'bg-indigo-50 border-indigo-200' },
+        { route:'settings', icon:SettingsIcon, label:'ตั้งค่า', color:'text-slate-600', bg:'bg-slate-100 border-slate-200' },
+      ];
+      const navItems = currentUser.role === 'admin' ? adminNav : agentNav;
+      const label = (navItems.find(n=>n.route===currentRoute) || {label:'หน้าหลัก'}).label;
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-```
+      return (
+        <div className="flex h-screen bg-slate-50 overflow-hidden">
+          {isSidebarOpen && <div className="fixed inset-0 z-40 lg:hidden" style={{background:'rgba(15,23,42,.5)'}} onClick={()=>setSidebarOpen(false)}/>}
+          <aside className={"fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col shadow-2xl lg:shadow-none transition-transform duration-300 " + (isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0')}>
+            <div className="h-16 flex items-center px-5 border-b border-slate-100 gap-3">
+              <div className="p-2 rounded-2xl shadow-lg" style={{background:'linear-gradient(135deg,#2563eb,#4f46e5)'}}><ActivityIcon className="text-white" size={20}/></div>
+              <span className="text-lg font-black text-transparent bg-clip-text" style={{backgroundImage:'linear-gradient(90deg,#2563eb,#4f46e5)'}}>Nova CRM</span>
+              <button className="ml-auto lg:hidden text-slate-400 hover:bg-slate-100 p-2 rounded-xl" onClick={()=>setSidebarOpen(false)}><XIcon size={17}/></button>
+            </div>
+            <nav className="flex-1 overflow-y-auto cscroll p-3 space-y-0.5">
+              {navItems.map(item => (
+                <MenuLink key={item.route} icon={item.icon} label={item.label} active={currentRoute===item.route}
+                  onClick={()=>{setCurrentRoute(item.route);setSidebarOpen(false);}} color={item.color} bg={item.bg}/>
+              ))}
+            </nav>
+            <div className="p-4 bg-slate-50 border-t border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center font-black text-white text-base shadow-md" style={{background:'linear-gradient(135deg,#3b82f6,#6366f1)'}}>{currentUser.name.charAt(0)}</div>
+                <div className="truncate flex-1 min-w-0">
+                  <p className="text-sm font-black text-slate-800 truncate">{currentUser.name}</p>
+                  <p className="text-[9px] font-bold text-slate-500 bg-slate-200 inline-block px-2 py-0.5 rounded-md mt-0.5 uppercase tracking-widest">{currentUser.role==='admin'?'ADMIN':currentUser.team}</p>
+                </div>
+              </div>
+            </div>
+          </aside>
+          <main className="flex-1 overflow-auto bg-slate-50/50">
+            <header className="h-14 bg-white/80 border-b border-slate-200 sticky top-0 z-30 px-4 lg:px-8 flex items-center justify-between shadow-sm" style={{backdropFilter:'blur(12px)'}}>
+              <div className="flex items-center gap-3">
+                <button className="lg:hidden p-2 bg-white border-2 border-slate-200 rounded-xl shadow-sm" onClick={()=>setSidebarOpen(true)}><MenuIcon size={18}/></button>
+                <h1 className="text-base font-black text-slate-800 uppercase tracking-tight">{label}</h1>
+              </div>
+              <button onClick={onLogout} title="ออกจากระบบ" className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-xl border-2 border-slate-200 transition">
+                <LogOutIcon size={16}/>
+              </button>
+            </header>
+            <div className="p-4 lg:p-8 max-w-[1600px] mx-auto pb-16">
+              {currentUser.role === 'admin' ? (
+                <div>
+                  {currentRoute==='home' && <AdminHome users={users} customers={customers}/>}
+                  {currentRoute==='settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users}/>}
+                </div>
+              ) : (
+                <div>
+                  {currentRoute==='home' && <AgentHome user={currentUser} customers={customers} tasks={tasks} addTask={addTask} toggleTask={toggleTask} removeTask={removeTask} setUsers={setUsers} users={users} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer}/>}
+                  {currentRoute==='add-lead' && <AddLead onAdd={addCustomer} setRoute={setCurrentRoute}/>}
+                  {currentRoute==='customers' && <CustomersView user={currentUser} customers={customers} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer}/>}
+                  {currentRoute==='pipeline' && <PipelineView customers={customers.filter(c=>c.agent_id===currentUser.id)}/>}
+                  {currentRoute==='analytics' && <AnalyticsView customers={customers.filter(c=>c.agent_id===currentUser.id)}/>}
+                  {currentRoute==='ranking' && <RankingView users={users} customers={customers} currentUser={currentUser}/>}
+                  {currentRoute==='ai-assistant' && <AIAssistantView user={currentUser} customers={customers.filter(c=>c.agent_id===currentUser.id)}/>}
+                  {currentRoute==='settings' && <SettingsView user={currentUser} setUsers={setUsers} users={users}/>}
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
+      );
+    }
 
+    function App() {
+      const [users, setUsers] = useState([]);
+      const [customers, setCustomers] = useState([]);
+      const [tasks, setTasks] = useState([]);
+      const [currentUser, setCurrentUser] = useState(null);
+      const [currentRoute, setCurrentRoute] = useState('home');
+      const [isSidebarOpen, setSidebarOpen] = useState(false);
+
+      const handleAuth = (email, password, name, team, isLogin) => {
+        if (isLogin) {
+          const user = users.find(u=>u.email.toLowerCase()===email.toLowerCase()&&u.password===password);
+          if (user) { setCurrentUser(user); setCurrentRoute('home'); }
+          else alert("รหัสผ่านหรืออีเมลไม่ถูกต้อง");
+        } else {
+          if (users.find(u=>u.email.toLowerCase()===email.toLowerCase())) { alert("อีเมลนี้มีการลงทะเบียนแล้ว"); return; }
+          const role = email.toLowerCase()===ADMIN_EMAIL.toLowerCase() ? 'admin' : 'agent';
+          const newUser = { id:Date.now().toString(), name:name, email:email, password:password, team:role==='admin'?'HQ Management':team, role:role, targetRevenue:100000 };
+          setUsers(function(prev){ return [...prev, newUser]; });
+          setCurrentUser(newUser);
+          setCurrentRoute('home');
+        }
+      };
+
+      const handleLogout = () => {
+        setCurrentUser(null);
+        setCurrentRoute('home');
+      };
+
+      useEffect(() => {
+        if (currentUser) {
+          const updated = users.find(u=>u.id===currentUser.id);
+          if (updated) setCurrentUser(updated);
+        }
+      }, [users]);
+
+      const addCustomer = (data) => setCustomers(function(prev){ return [...prev, Object.assign({}, data, {id:Date.now().toString(), agent_id:currentUser.id})]; });
+      const updateCustomer = (data) => setCustomers(function(prev){ return prev.map(c=>c.id===data.id?data:c); });
+      const deleteCustomer = (id) => setCustomers(function(prev){ return prev.filter(c=>c.id!==id); });
+      const addTask = (data) => setTasks(function(prev){ return [...prev, Object.assign({}, data, {id:Date.now().toString(), agent_id:currentUser.id})]; });
+      const toggleTask = (id) => setTasks(function(prev){ return prev.map(t=>t.id===id ? Object.assign({}, t, {status:t.status==='completed'?'pending':'completed'}) : t); });
+      const removeTask = (id) => setTasks(function(prev){ return prev.filter(t=>t.id!==id); });
+
+      if (!currentUser) return <AuthView onAuth={handleAuth} users={users}/>;
+
+      return (
+        <AppShell
+          currentUser={currentUser} users={users} customers={customers} tasks={tasks}
+          addCustomer={addCustomer} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer}
+          addTask={addTask} toggleTask={toggleTask} removeTask={removeTask}
+          setUsers={setUsers} currentRoute={currentRoute} setCurrentRoute={setCurrentRoute}
+          setSidebarOpen={setSidebarOpen} isSidebarOpen={isSidebarOpen}
+          onLogout={handleLogout}
+        />
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
   </script>
 </body>
 </html>
