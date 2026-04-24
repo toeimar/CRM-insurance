@@ -7,9 +7,9 @@
   <title>Nova CRM - Insurance Sales Platform</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
   <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
@@ -24,9 +24,20 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"><div id="loading" style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;flex-direction:column;gap:16px;"><div style="width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;"></div><p style="color:#64748b;font-weight:700;">กำลังโหลด...</p></div></div>
 
-  <script type="text/babel">
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      document.getElementById('root').innerHTML = '<div style="padding:32px;font-family:system-ui;max-width:600px;margin:auto;margin-top:60px;"><h2 style="color:#ef4444;font-weight:900;margin-bottom:16px;">เกิดข้อผิดพลาด</h2><pre style="background:#fef2f2;padding:16px;border-radius:12px;font-size:13px;overflow:auto;color:#991b1b;">' + msg + '\nLine: ' + line + '</pre></div>';
+
+```
+  return false;
+};
+```
+
+  </script>
+
+  <script type="text/babel" data-presets="react,env">
     const { useState, useEffect, useMemo, useRef } = React;
     const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, ResponsiveContainer, Cell, AreaChart, Area } = Recharts;
 
