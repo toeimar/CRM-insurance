@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -13,7 +14,8 @@
 
     <script>
         // 🔴🔴🔴 นำ Firebase Config ของคุณมาวางตรงนี้ 🔴🔴🔴
-        // ดูวิธีทำได้ที่หน้าจอเมื่อรันโค้ดนี้ครั้งแรก
+        // หากเปิดใช้งานบน Local Computer ให้นำ Config จาก Firebase Console มาใส่ที่นี่
+        // หากเปิดผ่านระบบ Platform โค้ดจะดึง Config อัตโนมัติและไม่จำเป็นต้องกรอกตรงนี้
         window.MY_FIREBASE_CONFIG = {
             apiKey: "",
             authDomain: "",
@@ -54,7 +56,7 @@
         } from 'https://esm.sh/lucide-react@0.358.0?deps=react@18.2.0';
 
         // --- FIREBASE SDK ---
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
@@ -77,15 +79,52 @@
         };
         const getTodayStr = () => new Date().toISOString().split('T')[0];
 
-        async function callClaudeAPI(messages, systemPrompt = "") {
-            const response = await fetch("https://api.anthropic.com/v1/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: systemPrompt, messages })
-            });
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-            return data.content.map(i => i.text || "").filter(Boolean).join("\n");
+        // --- FIREBASE INITIALIZATION (OUTSIDE COMPONENT) ---
+        const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+        const fbConfig = configStr ? JSON.parse(configStr) : (window.MY_FIREBASE_CONFIG?.apiKey ? window.MY_FIREBASE_CONFIG : null);
+
+        let app, auth, db;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-crm-app';
+
+        if (fbConfig) {
+            try {
+                app = !getApps().length ? initializeApp(fbConfig) : getApp();
+                auth = getAuth(app);
+                db = getFirestore(app);
+            } catch (e) {
+                console.error("Firebase init error", e);
+            }
+        }
+
+        // --- GEMINI AI API (REPLACING CLAUDE) ---
+        async function callGeminiChatAPI(messages, systemPrompt = "") {
+            const apiKey = ""; // Environment provides the key at runtime
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            
+            const formattedMessages = messages.map(m => ({
+                role: m.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: m.content }]
+            }));
+
+            const retries = [1000, 2000, 4000, 8000, 16000];
+            for (let i = 0; i <= retries.length; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            contents: formattedMessages,
+                            systemInstruction: { parts: [{ text: systemPrompt }] }
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.error) throw new Error(data.error.message);
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                } catch (error) {
+                    if (i === retries.length) throw new Error("ไม่สามารถเชื่อมต่อ AI ได้ กรุณาลองใหม่ภายหลัง");
+                    await new Promise(r => setTimeout(r, retries[i]));
+                }
+            }
         }
 
         // ============================================================================
@@ -93,8 +132,7 @@
         // ============================================================================
         function InsuranceCRMProduction() {
             const [fbUser, setFbUser] = useState(null);
-            const [db, setDb] = useState(null);
-            const [isFirebaseConfigured, setIsFirebaseConfigured] = useState(true);
+            const [isFirebaseConfigured] = useState(!!app);
 
             const [users, setUsers] = useState([]);
             const [customers, setCustomers] = useState([]);
@@ -103,43 +141,30 @@
             const [currentRoute, setCurrentRoute] = useState('home');
             const [isSidebarOpen, setSidebarOpen] = useState(false);
 
-            // 1. Initialize Firebase
+            // 1. Authenticate Firebase
             useEffect(() => {
-                const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-                const config = configStr ? JSON.parse(configStr) : (window.MY_FIREBASE_CONFIG.apiKey ? window.MY_FIREBASE_CONFIG : null);
+                if (!app) return;
 
-                if (!config) {
-                    setIsFirebaseConfigured(false);
-                    return;
-                }
-
-                try {
-                    const app = initializeApp(config);
-                    const auth = getAuth(app);
-                    const firestore = getFirestore(app);
-                    setDb(firestore);
-
-                    const initAuth = async () => {
+                const initAuth = async () => {
+                    try {
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await signInWithCustomToken(auth, __initial_auth_token);
                         } else {
                             await signInAnonymously(auth);
                         }
-                    };
-                    initAuth();
+                    } catch (err) {
+                        console.error("Auth error", err);
+                    }
+                };
+                initAuth();
 
-                    const unsubscribe = onAuthStateChanged(auth, setFbUser);
-                    return () => unsubscribe();
-                } catch (error) {
-                    console.error("Firebase init error:", error);
-                    setIsFirebaseConfigured(false);
-                }
+                const unsubscribe = onAuthStateChanged(auth, setFbUser);
+                return () => unsubscribe();
             }, []);
 
             // 2. Sync Real-time Database
             useEffect(() => {
                 if (!fbUser || !db) return;
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'github-nova-crm';
 
                 const unsubUsers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'crm_users'),
                     (snap) => setUsers(snap.docs.map(d => d.data())),
@@ -155,7 +180,7 @@
                 );
 
                 return () => { unsubUsers(); unsubCustomers(); unsubTasks(); };
-            }, [fbUser, db]);
+            }, [fbUser]);
 
             // Sync Current User when profile updates in DB
             useEffect(() => {
@@ -165,26 +190,26 @@
                         setCurrentUser(updated);
                     }
                 }
-            }, [users]);
+            }, [users, currentUser]);
 
-            // Setup Firebase screen
+            // Setup Firebase screen fallback
             if (!isFirebaseConfigured) {
                 return (
                     <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
                         <div className="bg-slate-800 p-8 rounded-3xl max-w-2xl border border-slate-700 shadow-2xl">
                             <Database size={64} className="mx-auto text-emerald-400 mb-6" />
-                            <h2 className="text-3xl font-black text-amber-400 mb-4">เชื่อมต่อระบบหลังบ้าน (Database)</h2>
+                            <h2 className="text-3xl font-black text-amber-400 mb-4">ระบบไม่สามารถเชื่อมต่อฐานข้อมูลได้</h2>
                             <p className="text-slate-300 text-lg mb-6 leading-relaxed">
-                                เพื่อให้ระบบสามารถจดจำข้อมูลบัญชี ล็อคอินซ้ำได้ และไม่หายไปเมื่อกดรีเฟรช คุณจำเป็นต้องตั้งค่า Firebase ก่อน
+                                ดูเหมือนว่าคุณกำลังรันไฟล์นี้ในเครื่องส่วนตัว (Local) โดยที่ยังไม่ได้ใส่ค่า Firebase Config ในตัวแปร <code>window.MY_FIREBASE_CONFIG</code> 
                             </p>
                             <div className="bg-slate-900 p-6 rounded-2xl text-left border border-slate-700 space-y-4">
-                                <h3 className="font-bold text-emerald-400 text-lg">วิธีตั้งค่าฟรี (ใช้เวลาเพียง 3 นาที):</h3>
+                                <h3 className="font-bold text-emerald-400 text-lg">วิธีแก้ไขเพื่อเริ่มต้นใช้งาน:</h3>
                                 <ol className="list-decimal pl-5 text-slate-300 space-y-3 text-sm font-bold">
                                     <li>ไปที่ <a href="https://console.firebase.google.com/" target="_blank" className="text-blue-400 underline">Firebase Console</a> และสร้างโปรเจกต์ใหม่</li>
                                     <li>ไปที่เมนู <b>Build &gt; Firestore Database</b> แล้วกด Create Database (เลือก Start in test mode)</li>
                                     <li>ไปที่เมนู <b>Build &gt; Authentication</b> กด Get Started แล้วกดเปิดใช้งานปุ่ม <b>Anonymous</b></li>
                                     <li>ไปที่เมนู Project Settings (รูปฟันเฟือง) เลื่อนลงมาล่างสุด กดสร้าง Web App (ไอคอน <b>&lt;/&gt;</b>)</li>
-                                    <li>คัดลอกค่า <b>firebaseConfig</b> มาวางในไฟล์ <code>index.html</code> ตรงบรรทัดที่เขียนว่า <code>window.MY_FIREBASE_CONFIG</code></li>
+                                    <li>คัดลอกค่า <b>firebaseConfig</b> มาวางในไฟล์ <code>index.html</code> ตรงบรรทัดที่เขียนว่า <code>window.MY_FIREBASE_CONFIG</code> ด้านบนสุด</li>
                                 </ol>
                             </div>
                         </div>
@@ -195,10 +220,7 @@
             if (!fbUser || !db) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><LoadingSpinner text="กำลังเชื่อมต่อฐานข้อมูล..." /></div>;
 
             // --- DATABASE MUTATION FUNCTIONS ---
-            const getDocRef = (collectionName, id) => {
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'github-nova-crm';
-                return doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
-            };
+            const getDocRef = (collectionName, id) => doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
 
             const handleAuth = async (email, password, name, team, isLogin) => {
                 if (isLogin) {
@@ -874,7 +896,7 @@
                     - วันนัดหมาย: ${formData.appointmentDate ? toBuddhistYear(formData.appointmentDate) : 'ยังไม่มี'}
                     - หมายเหตุ: ${formData.note || '-'}\nบอกตัวแทนว่า: 1) จุดแข็งในการปิดการขายรายนี้คืออะไร 2) ควรนำเสนอเรื่องอะไรก่อน 3) ขั้นตอนต่อไปที่แนะนำ`;
 
-                    const result = await callClaudeAPI([{ role: "user", content: userPrompt }], systemPrompt);
+                    const result = await callGeminiChatAPI([{ role: "user", content: userPrompt }], systemPrompt);
                     setAiInsight(result);
                 } catch (err) {
                     setAiError("ไม่สามารถเชื่อมต่อ AI ได้ในขณะนี้");
@@ -1183,7 +1205,7 @@
         }
 
         // ============================================================================
-        // AI ASSISTANT VIEW - REAL CLAUDE API CHAT
+        // AI ASSISTANT VIEW - REAL GEMINI API CHAT
         // ============================================================================
         function AIAssistantView({ user, customers }) {
             const [messages, setMessages] = useState([]);
@@ -1222,7 +1244,7 @@
 
                 try {
                     const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }));
-                    const reply = await callClaudeAPI(apiMessages, systemPrompt);
+                    const reply = await callGeminiChatAPI(apiMessages, systemPrompt);
                     setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
                 } catch (err) {
                     setMessages(prev => [...prev, { role: 'assistant', content: '❌ ไม่สามารถเชื่อมต่อได้ในขณะนี้ กรุณาลองใหม่' }]);
@@ -1238,7 +1260,7 @@
                         </div>
                         <div>
                             <h2 className="text-2xl font-black text-slate-800">AI Sales Assistant</h2>
-                            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">ขับเคลื่อนด้วย Claude AI · ตอบเป็นภาษาไทย</p>
+                            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">ขับเคลื่อนด้วย Gemini 2.5 Flash · ตอบเป็นภาษาไทย</p>
                         </div>
                         <div className="ml-auto flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
