@@ -1,5 +1,5 @@
+```html
 <!DOCTYPE html>
-
 <html lang="th">
 <head>
   <meta charset="UTF-8">
@@ -7,27 +7,20 @@
   <title>Nova CRM - Smart Insurance Dashboard</title>
 
   <!-- Tailwind CSS -->
-
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Phosphor Icons (แทน Lucide เพื่อความเสถียรบน HTML) -->
-
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
   <!-- React & ReactDOM -->
-
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 
   <!-- Recharts & PropTypes สำหรับกราฟ -->
-
   <script crossorigin src="https://unpkg.com/prop-types/prop-types.min.js"></script>
-
   <script crossorigin src="https://unpkg.com/recharts/umd/Recharts.js"></script>
 
   <!-- Babel Compiler -->
-
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -39,10 +32,11 @@
     .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   </style>
 
-  <!-- Firebase Config -->
-
+  <!-- ========================================== -->
+  <!-- YOUR FIREBASE CONFIGURATION                -->
+  <!-- ========================================== -->
   <script>
-    window.__firebase_config = JSON.stringify({
+    window.MY_FIREBASE_CONFIG = {
       apiKey: "AIzaSyA6pLMExFN2d7oVQKLldcB_ahB5-o4zw_E",
       authDomain: "vitalvibe-c0306.firebaseapp.com",
       projectId: "vitalvibe-c0306",
@@ -50,11 +44,10 @@
       messagingSenderId: "18887442289",
       appId: "1:18887442289:web:655ebb50976c911fec80d0",
       measurementId: "G-4DWBTKPNP3"
-    });
+    };
   </script>
 
-  <!-- Firebase Setup (Optional Cloud Sync) -->
-
+  <!-- Firebase Integration -->
   <script type="module">
     try {
       import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js").then(appModule => {
@@ -74,7 +67,6 @@
       console.warn("Firebase blocked. Running in offline/memory mode.");
     }
   </script>
-
 </head>
 <body class="text-slate-800">
   <div id="root"></div>
@@ -114,7 +106,7 @@
       const [appState, setAppState] = useState('loading');
       const [isCloud, setIsCloud] = useState(false);
       const [db, setDb] = useState(null);
-      const [appIdStr, setAppIdStr] = useState('nova-crm-github');
+      const [appIdStr, setAppIdStr] = useState('nova-crm-production');
       const [toastMsg, setToastMsg] = useState(null);
       
       // Data States
@@ -132,9 +124,15 @@
       // --- INITIALIZATION ---
       useEffect(() => {
         const initSystem = async () => {
-          let config = null;
-          if (typeof window !== 'undefined' && window.__firebase_config) config = JSON.parse(window.__firebase_config);
-          if (typeof window !== 'undefined' && window.__app_id) setAppIdStr(window.__app_id);
+          let config = window.MY_FIREBASE_CONFIG; // <--- ดึง Config ของคุณมาใช้
+
+          // เช็คเผื่อรันใน Environment จำลอง
+          if (typeof window !== 'undefined' && window.__firebase_config && !config) {
+              config = JSON.parse(window.__firebase_config);
+          }
+          if (typeof window !== 'undefined' && window.__app_id) {
+              setAppIdStr(window.__app_id);
+          }
 
           let retries = 0;
           while (!window.FirebaseAPI && retries < 15) { await new Promise(r => setTimeout(r, 100)); retries++; }
@@ -149,13 +147,21 @@
             const firestoreDb = window.FirebaseAPI.getFirestore(app);
             setDb(firestoreDb);
 
-            if (typeof window !== 'undefined' && window.__initial_auth_token) await window.FirebaseAPI.signInWithCustomToken(auth, window.__initial_auth_token);
-            else await window.FirebaseAPI.signInAnonymously(auth);
+            // Authentication 
+            if (typeof window !== 'undefined' && window.__initial_auth_token) {
+                await window.FirebaseAPI.signInWithCustomToken(auth, window.__initial_auth_token);
+            } else {
+                await window.FirebaseAPI.signInAnonymously(auth);
+            }
 
             window.FirebaseAPI.onAuthStateChanged(auth, user => {
                 if(user) { setIsCloud(true); setAppState('ready'); }
             });
-          } catch(err) { setIsCloud(false); setAppState('ready'); }
+          } catch(err) { 
+            console.error("Firebase Connection Error:", err);
+            setIsCloud(false); 
+            setAppState('ready'); 
+          }
         };
         initSystem();
       }, []);
@@ -176,8 +182,13 @@
       // --- DATA WRITERS ---
       const writeData = async (collectionName, id, data, localSetter) => {
         if(isCloud && db) {
-          const ref = window.FirebaseAPI.doc(db, 'artifacts', appIdStr, 'public', 'data', collectionName, id);
-          await window.FirebaseAPI.setDoc(ref, data);
+          try {
+              const ref = window.FirebaseAPI.doc(db, 'artifacts', appIdStr, 'public', 'data', collectionName, id);
+              await window.FirebaseAPI.setDoc(ref, data);
+          } catch(e) {
+              console.error("Write error:", e);
+              showToast("พบปัญหาบันทึกข้อมูล โปรดเช็ค Firebase Rules");
+          }
         } else {
           localSetter(prev => { const exists = prev.find(item => item.id === id); return exists ? prev.map(item => item.id === id ? data : item) : [...prev, data]; });
         }
@@ -215,7 +226,7 @@
 
       // --- RENDER ---
       if (appState === 'loading') {
-        return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Icon name="spinner-gap" size={48} className="animate-spin mb-4 text-blue-500" /><p className="font-bold text-slate-400">กำลังเริ่มต้นระบบ...</p></div>;
+        return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Icon name="spinner-gap" size={48} className="animate-spin mb-4 text-blue-500" /><p className="font-bold text-slate-400">กำลังเชื่อมต่อฐานข้อมูล...</p></div>;
       }
 
       if (!currentUser) return <AuthView onSuccess={handleAuthSuccess} users={users} />;
@@ -423,32 +434,38 @@
       }, 0);
       const progress = Math.min(100, Math.round((monthRev / (user.targetRevenue || 1)) * 100));
 
+      // --- SMART ALERTS (5 Rules Restored) ---
       const alerts = useMemo(() => {
         const arr = [];
         const today = new Date();
         
         myCustomers.forEach(c => {
+          // 1. Meeting Alert
           if(c.appointmentDate) {
             const diff = Math.ceil((new Date(c.appointmentDate) - today) / (1000*60*60*24));
             if(diff === 0) arr.push({ title: 'นัดพบ/โทร วันนี้!', desc: `คุณมีนัดกับ ${c.name}`, icon: 'calendar-check', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', customer: c });
             else if(diff > 0 && diff <= 3) arr.push({ title: 'นัดหมายเร็วๆ นี้', desc: `นัด ${c.name} ใน ${diff} วัน (${toBuddhistYear(c.appointmentDate)})`, icon: 'clock', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200', customer: c });
           }
+          // 2. Birthday Alert
           if(c.dob) {
             const bday = new Date(c.dob); bday.setFullYear(today.getFullYear());
             if(bday < today && today.getMonth() > bday.getMonth()) bday.setFullYear(today.getFullYear() + 1);
             const diff = Math.ceil((bday - today) / (1000*60*60*24));
             if(diff >= 0 && diff <= 7) arr.push({ title: 'วันเกิดลูกค้า', desc: `${c.name} ครบรอบวันเกิดในอีก ${diff} วัน`, icon: 'gift', color: 'text-pink-600', bg: 'bg-pink-50 border-pink-200', customer: c });
           }
+          // 3. Renewal Alert
           if(c.policies) {
             c.policies.forEach(p => {
               const diff = Math.ceil((new Date(p.endDate) - today) / (1000*60*60*24));
               if(diff >= 0 && diff <= 30) arr.push({ title: 'แจ้งเตือนต่ออายุ', desc: `กรมธรรม์ ${p.planName} ของ ${c.name} จะหมดใน ${diff} วัน`, icon: 'file-text', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', customer: c });
             });
           }
+          // 4. Inactive Alert
           if(c.status !== 'ปิดการขาย' && c.lastContact) {
             const diff = Math.ceil((today - new Date(c.lastContact)) / (1000*60*60*24));
             if(diff > 30) arr.push({ title: 'Lead ไม่มีการอัปเดต', desc: `${c.name} ขาดการติดต่อนาน ${diff} วันแล้ว`, icon: 'warning-circle', color: 'text-red-600', bg: 'bg-red-50 border-red-200', customer: c });
           }
+          // 5. Aftercare Alert
           if(c.status === 'ปิดการขาย' && c.closedDate) {
             const diff = Math.ceil((today - new Date(c.closedDate)) / (1000*60*60*24));
             if(diff >= 90 && diff <= 95) arr.push({ title: 'ดูแลหลังการขาย (Aftercare)', desc: `ปิดการขาย ${c.name} ครบ 3 เดือนแล้ว โทรไปทักทายหน่อย`, icon: 'phone-call', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', customer: c });
@@ -578,6 +595,7 @@
       );
     }
 
+    // --- ADD LEAD VIEW (FULL VERSION RESTORED) ---
     function AddLeadView({ onAdd, setRoute }) {
       const [formData, setFormData] = useState({ 
         name: '', gender: 'Male', dob: '', phone: '', lineId: '', 
@@ -604,6 +622,7 @@
           <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="user-plus" className="text-orange-500" size={40}/> เพิ่ม Lead ใหม่</h2><p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">กรอกข้อมูลผู้มุ่งหวังให้ครบถ้วนเพื่อผลลัพธ์ที่ดีที่สุด</p></div>
 
           <form onSubmit={handleSubmit} className="bg-white rounded-[3rem] shadow-sm border border-slate-100 p-8 lg:p-12 space-y-12">
+            {/* Section 1 */}
             <div>
               <h3 className="font-black text-xl text-slate-800 border-b-2 border-slate-100 pb-4 mb-6 flex items-center gap-3"><Icon name="users" size={24} className="text-blue-500"/> ข้อมูลส่วนตัว</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -618,6 +637,7 @@
               </div>
             </div>
 
+            {/* Section 2 */}
             <div>
               <h3 className="font-black text-xl text-slate-800 border-b-2 border-slate-100 pb-4 mb-6 flex items-center gap-3"><Icon name="phone" size={24} className="text-emerald-500"/> ติดต่อ & อาชีพ</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -628,6 +648,7 @@
               </div>
             </div>
 
+            {/* Section 3 */}
             <div>
               <h3 className="font-black text-xl text-slate-800 border-b-2 border-slate-100 pb-4 mb-6 flex items-center gap-3"><Icon name="briefcase" size={24} className="text-purple-500"/> ข้อมูลประกัน</h3>
               <div className="space-y-6">
@@ -648,451 +669,466 @@
               </div>
             </div>
 
+            {/* Section 4 */}
             <div>
               <h3 className="font-black text-xl text-slate-800 border-b-2 border-slate-100 pb-4 mb-6 flex items-center gap-3"><Icon name="calendar" size={24} className="text-pink-500"/> การติดตาม & นัดหมาย</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">แหล่งที่มา (Lead Source)</label><select name="leadSource" value={formData.leadSource} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black"><option>Facebook Ads</option><option>Tiktok</option><option>Walk-in</option><option>Referral (แนะนำ)</option></select></div>
                 <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">วันที่นัดหมาย (เข้าพบ/นัดโทร)</label><input type="date" name="appointmentDate" value={formData.appointmentDate} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black" /></div>
                 <div className="md:col-span-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note} onChange={handleChange} rows={4} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-bold text-slate-800"></textarea></div>
-
-```
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-5 pt-10 border-t-2 border-slate-100">
-          <button type="button" onClick={() => setRoute('home')} className="px-8 py-4 rounded-2xl font-black text-slate-500 hover:bg-slate-100 transition text-lg">ยกเลิก</button>
-          <button type="submit" className="px-12 py-4 rounded-2xl font-black text-white bg-gradient-to-r from-orange-500 to-red-500 shadow-xl shadow-orange-500/40 transform hover:-translate-y-1 transition text-lg"><Icon name="floppy-disk" size={24} className="inline mr-2"/> บันทึกข้อมูล Lead</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function CustomersView({ user, customers, updateCustomer, deleteCustomer }) {
-  const [activeTab, setActiveTab] = useState('ทั้งหมด');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-
-  const myCustomers = customers.filter(c => c.agent_id === user.id);
-  const filtered = myCustomers.filter(c => {
-    const matchSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm);
-    const matchStatus = activeTab === 'ทั้งหมด' || c.status === activeTab;
-    return matchSearch && matchStatus;
-  });
-
-  return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 mb-4">
-        <div>
-          <h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={40}/> ฐานข้อมูลลูกค้า</h2>
-          <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">ค้นหา กรอง และจัดการข้อมูลลูกค้าในมือคุณ</p>
-        </div>
-        <div className="relative w-full md:w-96">
-          <Icon name="magnifying-glass" className="absolute left-5 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-          <input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} className="w-full pl-14 pr-5 py-4 border-2 border-slate-200 rounded-2xl focus:border-blue-500 outline-none shadow-sm font-black" />
-        </div>
-      </div>
-
-      <div className="flex overflow-x-auto custom-scrollbar gap-3 pb-4">
-        {['ทั้งหมด', ...STATUS_LIST].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`px-8 py-3.5 rounded-2xl font-black whitespace-nowrap transition-all border-2 text-sm ${activeTab === tab ? 'bg-blue-600 text-white border-blue-600 shadow-xl transform -translate-y-1' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
-            {tab} <span className={`ml-3 px-3 py-1 rounded-lg text-xs font-black ${activeTab === tab ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{tab === 'ทั้งหมด' ? myCustomers.length : myCustomers.filter(c=>c.status===tab).length}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-        {filtered.map(c => (
-          <div key={c.id} className="bg-white rounded-[2.5rem] p-8 border-2 border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all relative overflow-hidden group">
-            <div className={`absolute top-0 right-0 w-24 h-24 rounded-bl-full -mr-4 -mt-4 opacity-20 ${c.status === 'ปิดการขาย' ? 'bg-emerald-500' : c.status === 'ลีดใหม่' ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
-            <div className="flex justify-between items-start mb-6 relative z-10">
-              <div className="flex items-center gap-4">
-                 <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors text-xl">{c.name.charAt(0)}</div>
-                 <div><h3 className="font-black text-xl text-slate-800">{c.name}</h3><p className="text-sm text-slate-500 flex items-center gap-1.5 mt-1 font-bold"><Icon name="phone" size={14}/> {c.phone}</p></div>
               </div>
             </div>
-            <div className="mb-6"><span className={`inline-block px-4 py-1.5 rounded-xl text-xs font-black border-2 uppercase tracking-widest ${c.status === 'ปิดการขาย' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : c.status === 'ลีดใหม่' ? 'bg-blue-50 border-blue-200 text-blue-700' : c.status === 'เสนอแบบ' ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700'}`}>{c.status}</span></div>
-            <div className="space-y-3 mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <div className="flex justify-between text-sm border-b border-slate-200 pb-3"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">นัดล่าสุด</span><span className="font-black text-slate-800">{c.appointmentDate ? toBuddhistYear(c.appointmentDate) : '-'}</span></div>
-              <div className="flex justify-between text-sm border-b border-slate-200 pb-3"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">AI Score</span><span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-600 text-lg">{c.ai_score || 0}/100</span></div>
-              <div className="flex justify-between text-sm items-center"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">แผนที่สนใจ</span><span className="font-black text-blue-600 truncate max-w-[140px] text-right">{c.interestedPlan || '-'}</span></div>
+
+            <div className="flex justify-end gap-5 pt-10 border-t-2 border-slate-100">
+              <button type="button" onClick={() => setRoute('home')} className="px-8 py-4 rounded-2xl font-black text-slate-500 hover:bg-slate-100 transition text-lg">ยกเลิก</button>
+              <button type="submit" className="px-12 py-4 rounded-2xl font-black text-white bg-gradient-to-r from-orange-500 to-red-500 shadow-xl shadow-orange-500/40 transform hover:-translate-y-1 transition text-lg"><Icon name="floppy-disk" size={24} className="inline mr-2"/> บันทึกข้อมูล Lead</button>
             </div>
-            <button onClick={() => setSelectedCustomer(c)} className="w-full py-4 bg-white hover:bg-blue-50 text-blue-600 font-black rounded-2xl transition border-2 border-slate-200 hover:border-blue-300 flex items-center justify-center gap-2">ดู / แก้ไขข้อมูล <Icon name="caret-right" size={18}/></button>
-          </div>
-        ))}
-        {filtered.length === 0 && <div className="col-span-full bg-white p-20 rounded-[3rem] text-center border-2 border-slate-100"><Icon name="database" size={80} className="mx-auto text-slate-200 mb-6" /><h3 className="text-3xl font-black text-slate-600">ไม่พบข้อมูลลูกค้า</h3></div>}
-      </div>
-
-      {selectedCustomer && <CustomerModal customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onSave={updateCustomer} onDelete={deleteCustomer} />}
-    </div>
-  );
-}
-
-function CustomerModal({ customer, onClose, onSave, onDelete }) {
-  const [formData, setFormData] = useState({ ...customer });
-  const [isAddingPolicy, setIsAddingPolicy] = useState(false);
-  const [newPolicy, setNewPolicy] = useState({ planName: '', policyNo: '', cycle: 'Yearly', startDate: '', endDate: '', premium: '' });
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiInsight, setAiInsight] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    if(name === 'dob') setFormData(prev => ({ ...prev, [name]: value, age: calculateAge(value) }));
-    else setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSave = () => {
-    if(formData.status === 'ปิดการขาย' && customer.status !== 'ปิดการขาย') formData.closedDate = getTodayStr();
-    formData.lastContact = getTodayStr(); 
-    onSave(formData); onClose();
-  };
-
-  const handleAddPolicy = () => {
-    if(!newPolicy.planName || !newPolicy.endDate) return alert("กรุณากรอกชื่อแผนและวันต่ออายุ");
-    setFormData(prev => ({ 
-      ...prev, 
-      premium: Number(prev.premium || 0) + Number(newPolicy.premium || 0),
-      policies: [...(prev.policies || []), newPolicy] 
-    }));
-    setIsAddingPolicy(false);
-    setNewPolicy({ planName: '', policyNo: '', cycle: 'Yearly', startDate: '', endDate: '', premium: '' });
-  };
-
-  const generateAiInsight = () => {
-    setIsAiLoading(true);
-    setTimeout(() => {
-      let insight = "";
-      if (formData.status === 'ปิดการขาย') insight = `AI (Aftercare): ลูกค้าปิดการขายแผน ${formData.interestedPlan} ไปแล้ว แนะนำให้รักษาสัมพันธ์และนำเสนอแผนควบการลงทุนเพิ่มเติมในปีหน้า`;
-      else if (formData.status === 'นัดหมาย') insight = `AI (Closing Strategy): ลูกค้ามีรายได้ ${formData.income} และสนใจแผน ${formData.interestedPlan} มีโอกาสปิดการขาย 85% เตรียมข้อมูลเรื่องภาษีไปนำเสนอเพิ่มเติม`;
-      else insight = `AI วิเคราะห์: ลูกค้ามีสถานะ ${formData.status} แนะนำให้ส่งบทความสั้นๆ ทาง Line (${formData.lineId || 'เบอร์โทร'}) ก่อนโทรคุย`;
-      setAiInsight(insight); setIsAiLoading(false);
-    }, 1500);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 sm:p-6">
-      <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
-        <div className="px-10 py-6 border-b border-slate-100 flex justify-between items-center bg-white z-10">
-          <div><h2 className="text-3xl font-black text-slate-800">{formData.name}</h2><p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-1">จัดการข้อมูลและอัปเดตสถานะการขาย</p></div>
-          <button onClick={onClose} className="text-slate-400 hover:bg-slate-100 p-3 rounded-2xl transition"><Icon name="x" size={24}/></button>
+          </form>
         </div>
+      );
+    }
 
-        <div className="flex-1 overflow-y-auto p-6 lg:p-10 space-y-10 custom-scrollbar bg-slate-50/50">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-10">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
-                <div className="space-y-3"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ปรับสถานะ</label><select name="status" value={formData.status} onChange={handleChange} className="w-full px-5 py-4 border-2 border-blue-200 rounded-2xl bg-blue-50 font-black text-blue-800 outline-none text-lg">{STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                <div className="space-y-3"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ยอดขายรวมลูกค้ารายนี้</label><input type="number" name="premium" value={formData.premium} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-lg text-slate-800" /></div>
-                <div className="space-y-3"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">วันนัดหมายต่อไป</label><input type="date" name="appointmentDate" value={formData.appointmentDate} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-700" /></div>
-              </div>
+    // --- CUSTOMERS VIEW ---
+    function CustomersView({ user, customers, updateCustomer, deleteCustomer }) {
+      const [activeTab, setActiveTab] = useState('ทั้งหมด');
+      const [searchTerm, setSearchTerm] = useState('');
+      const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-              <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
-                <h3 className="font-black text-slate-800 mb-6 text-2xl border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Icon name="user" size={28} className="text-blue-500"/> ข้อมูลลูกค้า</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  <div className="space-y-2"><label className="block text-xs font-black text-slate-400">เบอร์โทร</label><input type="text" name="phone" value={formData.phone} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
-                  <div className="space-y-2"><label className="block text-xs font-black text-slate-400">Line ID</label><input type="text" name="lineId" value={formData.lineId} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
-                  <div className="space-y-2"><label className="block text-xs font-black text-slate-400">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={formData.interestedPlan} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black text-blue-600" /></div>
-                  <div className="lg:col-span-3 space-y-2"><label className="block text-xs font-black text-slate-400">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note} onChange={handleChange} rows={2} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-bold" /></div>
-                </div>
-              </div>
+      const myCustomers = customers.filter(c => c.agent_id === user.id);
+      const filtered = myCustomers.filter(c => {
+        const matchSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm);
+        const matchStatus = activeTab === 'ทั้งหมด' || c.status === activeTab;
+        return matchSearch && matchStatus;
+      });
 
-              {formData.status === 'ปิดการขาย' && (
-                <div className="bg-emerald-50/50 rounded-[2rem] p-8 border-2 border-emerald-200 shadow-inner">
-                  <div className="flex justify-between items-center mb-8">
-                    <div><h3 className="font-black text-emerald-800 flex items-center gap-3 text-2xl"><Icon name="shield-check" size={32}/> กรมธรรม์ที่ซื้อแล้ว</h3></div>
-                    <button onClick={() => setIsAddingPolicy(!isAddingPolicy)} className="px-6 py-3 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 flex items-center gap-2 shadow-lg"><Icon name="plus" size={20}/> เพิ่มกรมธรรม์</button>
+      return (
+        <div className="space-y-8">
+          <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 mb-4">
+            <div>
+              <h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={40}/> ฐานข้อมูลลูกค้า</h2>
+              <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">ค้นหา กรอง และจัดการข้อมูลลูกค้าในมือคุณ</p>
+            </div>
+            <div className="relative w-full md:w-96">
+              <Icon name="magnifying-glass" className="absolute left-5 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
+              <input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} className="w-full pl-14 pr-5 py-4 border-2 border-slate-200 rounded-2xl focus:border-blue-500 outline-none shadow-sm font-black" />
+            </div>
+          </div>
+
+          <div className="flex overflow-x-auto custom-scrollbar gap-3 pb-4">
+            {['ทั้งหมด', ...STATUS_LIST].map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`px-8 py-3.5 rounded-2xl font-black whitespace-nowrap transition-all border-2 text-sm ${activeTab === tab ? 'bg-blue-600 text-white border-blue-600 shadow-xl transform -translate-y-1' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                {tab} <span className={`ml-3 px-3 py-1 rounded-lg text-xs font-black ${activeTab === tab ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{tab === 'ทั้งหมด' ? myCustomers.length : myCustomers.filter(c=>c.status===tab).length}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+            {filtered.map(c => (
+              <div key={c.id} className="bg-white rounded-[2.5rem] p-8 border-2 border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all relative overflow-hidden group">
+                <div className={`absolute top-0 right-0 w-24 h-24 rounded-bl-full -mr-4 -mt-4 opacity-20 ${c.status === 'ปิดการขาย' ? 'bg-emerald-500' : c.status === 'ลีดใหม่' ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
+                
+                <div className="flex justify-between items-start mb-6 relative z-10">
+                  <div className="flex items-center gap-4">
+                     <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors text-xl">{c.name.charAt(0)}</div>
+                     <div><h3 className="font-black text-xl text-slate-800">{c.name}</h3><p className="text-sm text-slate-500 flex items-center gap-1.5 mt-1 font-bold"><Icon name="phone" size={14}/> {c.phone}</p></div>
                   </div>
-                  {isAddingPolicy && (
-                    <div className="bg-white p-6 rounded-3xl border-2 border-emerald-200 mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shadow-md animate-in fade-in">
-                      <div className="md:col-span-2"><label className="text-[10px] font-black text-slate-400 mb-1 block">ชื่อแผน</label><input type="text" value={newPolicy.planName} onChange={(e)=>setNewPolicy({...newPolicy, planName: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black" /></div>
-                      <div><label className="text-[10px] font-black text-slate-400 mb-1 block">เลขกรมธรรม์</label><input type="text" value={newPolicy.policyNo} onChange={(e)=>setNewPolicy({...newPolicy, policyNo: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black" /></div>
-                      <div><label className="text-[10px] font-black text-slate-400 mb-1 block">รอบชำระ</label><select value={newPolicy.cycle} onChange={(e)=>setNewPolicy({...newPolicy, cycle: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"><option>รายเดือน</option><option>รายปี</option></select></div>
-                      <div className="lg:col-span-2"><label className="text-[10px] font-black text-red-400 mb-1 block">วันต่ออายุ *</label><input type="date" value={newPolicy.endDate} onChange={(e)=>setNewPolicy({...newPolicy, endDate: e.target.value})} className="w-full border-2 border-orange-200 bg-orange-50 rounded-xl px-4 py-2 font-black text-orange-800" /></div>
-                      <div className="lg:col-span-2"><label className="text-[10px] font-black text-emerald-600 mb-1 block">ค่าเบี้ย</label><input type="number" value={newPolicy.premium} onChange={(e)=>setNewPolicy({...newPolicy, premium: e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black text-emerald-800" /></div>
-                      <button onClick={handleAddPolicy} className="md:col-span-2 lg:col-span-4 py-3 bg-emerald-500 text-white rounded-xl font-black mt-2">บันทึกข้อมูลกรมธรรม์</button>
+                </div>
+
+                <div className="mb-6"><span className={`inline-block px-4 py-1.5 rounded-xl text-xs font-black border-2 uppercase tracking-widest ${c.status === 'ปิดการขาย' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : c.status === 'ลีดใหม่' ? 'bg-blue-50 border-blue-200 text-blue-700' : c.status === 'เสนอแบบ' ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700'}`}>{c.status}</span></div>
+
+                <div className="space-y-3 mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                  <div className="flex justify-between text-sm border-b border-slate-200 pb-3"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">นัดล่าสุด</span><span className="font-black text-slate-800">{c.appointmentDate ? toBuddhistYear(c.appointmentDate) : '-'}</span></div>
+                  <div className="flex justify-between text-sm border-b border-slate-200 pb-3"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">AI Score</span><span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-600 text-lg">{c.ai_score || 0}/100</span></div>
+                  <div className="flex justify-between text-sm items-center"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">แผนที่สนใจ</span><span className="font-black text-blue-600 truncate max-w-[140px] text-right">{c.interestedPlan || '-'}</span></div>
+                </div>
+
+                <button onClick={() => setSelectedCustomer(c)} className="w-full py-4 bg-white hover:bg-blue-50 text-blue-600 font-black rounded-2xl transition border-2 border-slate-200 hover:border-blue-300 flex items-center justify-center gap-2">ดู / แก้ไขข้อมูล <Icon name="caret-right" size={18}/></button>
+              </div>
+            ))}
+            {filtered.length === 0 && <div className="col-span-full bg-white p-20 rounded-[3rem] text-center border-2 border-slate-100"><Icon name="database" size={80} className="mx-auto text-slate-200 mb-6" /><h3 className="text-3xl font-black text-slate-600">ไม่พบข้อมูลลูกค้า</h3></div>}
+          </div>
+
+          {selectedCustomer && <CustomerModal customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onSave={updateCustomer} onDelete={deleteCustomer} />}
+        </div>
+      );
+    }
+
+    // --- MODAL (FULL VERSION RESTORED - POLICIES & AI INSIGHT) ---
+    function CustomerModal({ customer, onClose, onSave, onDelete }) {
+      const [formData, setFormData] = useState({ ...customer });
+      const [isAddingPolicy, setIsAddingPolicy] = useState(false);
+      const [newPolicy, setNewPolicy] = useState({ planName: '', policyNo: '', cycle: 'Yearly', startDate: '', endDate: '', premium: '' });
+      const [isAiLoading, setIsAiLoading] = useState(false);
+      const [aiInsight, setAiInsight] = useState(null);
+      const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+      const handleChange = (e) => {
+        const { name, value } = e.target;
+        if(name === 'dob') setFormData(prev => ({ ...prev, [name]: value, age: calculateAge(value) }));
+        else setFormData(prev => ({ ...prev, [name]: value }));
+      };
+
+      const handleSave = () => {
+        if(formData.status === 'ปิดการขาย' && customer.status !== 'ปิดการขาย') formData.closedDate = getTodayStr();
+        formData.lastContact = getTodayStr(); 
+        onSave(formData); onClose();
+      };
+
+      const handleAddPolicy = () => {
+        if(!newPolicy.planName || !newPolicy.endDate) return alert("กรุณากรอกชื่อแผนและวันต่ออายุ");
+        setFormData(prev => ({ 
+          ...prev, 
+          premium: Number(prev.premium || 0) + Number(newPolicy.premium || 0),
+          policies: [...(prev.policies || []), newPolicy] 
+        }));
+        setIsAddingPolicy(false);
+        setNewPolicy({ planName: '', policyNo: '', cycle: 'Yearly', startDate: '', endDate: '', premium: '' });
+      };
+
+      const generateAiInsight = () => {
+        setIsAiLoading(true);
+        setTimeout(() => {
+          let insight = "";
+          if (formData.status === 'ปิดการขาย') insight = `AI (Aftercare): ลูกค้าปิดการขายแผน ${formData.interestedPlan} ไปแล้ว แนะนำให้รักษาสัมพันธ์และนำเสนอแผนควบการลงทุนเพิ่มเติมในปีหน้า`;
+          else if (formData.status === 'นัดหมาย') insight = `AI (Closing Strategy): ลูกค้ามีรายได้ ${formData.income} และสนใจแผน ${formData.interestedPlan} มีโอกาสปิดการขาย 85% เตรียมข้อมูลเรื่องภาษีไปนำเสนอเพิ่มเติม`;
+          else insight = `AI วิเคราะห์: ลูกค้ามีสถานะ ${formData.status} แนะนำให้ส่งบทความสั้นๆ ทาง Line (${formData.lineId || 'เบอร์โทร'}) ก่อนโทรคุย`;
+          setAiInsight(insight); setIsAiLoading(false);
+        }, 1500);
+      };
+
+      return (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 sm:p-6">
+          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="px-10 py-6 border-b border-slate-100 flex justify-between items-center bg-white z-10">
+              <div><h2 className="text-3xl font-black text-slate-800">{formData.name}</h2><p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-1">จัดการข้อมูลและอัปเดตสถานะการขาย</p></div>
+              <button onClick={onClose} className="text-slate-400 hover:bg-slate-100 p-3 rounded-2xl transition"><Icon name="x" size={24}/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 lg:p-10 space-y-10 custom-scrollbar bg-slate-50/50">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-10">
+                  {/* QUICK STATUS EDIT */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+                    <div className="space-y-3"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ปรับสถานะ</label><select name="status" value={formData.status} onChange={handleChange} className="w-full px-5 py-4 border-2 border-blue-200 rounded-2xl bg-blue-50 font-black text-blue-800 outline-none text-lg">{STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                    <div className="space-y-3"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ยอดขายรวมลูกค้ารายนี้</label><input type="number" name="premium" value={formData.premium} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-lg text-slate-800" /></div>
+                    <div className="space-y-3"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">วันนัดหมายต่อไป</label><input type="date" name="appointmentDate" value={formData.appointmentDate} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-700" /></div>
+                  </div>
+
+                  {/* EDITABLE DETAILS */}
+                  <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+                    <h3 className="font-black text-slate-800 mb-6 text-2xl border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Icon name="user" size={28} className="text-blue-500"/> ข้อมูลลูกค้า</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">เบอร์โทร</label><input type="text" name="phone" value={formData.phone} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">Line ID</label><input type="text" name="lineId" value={formData.lineId} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={formData.interestedPlan} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black text-blue-600" /></div>
+                      <div className="lg:col-span-3 space-y-2"><label className="block text-xs font-black text-slate-400">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note} onChange={handleChange} rows={2} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-bold" /></div>
                     </div>
-                  )}
-                  {(!formData.policies || formData.policies.length === 0) ? (
-                    <div className="bg-white p-8 rounded-3xl text-center border-2 border-emerald-100 border-dashed"><p className="text-emerald-600 font-black">ยังไม่มีข้อมูลกรมธรรม์</p></div>
-                  ) : (
-                    <div className="space-y-4">
-                      {formData.policies.map((p, i) => (
-                        <div key={i} className="bg-white p-6 rounded-[2rem] border-2 border-emerald-100 flex flex-wrap justify-between items-center gap-5 shadow-sm">
-                          <div>
-                            <p className="font-black text-xl text-slate-800">{p.planName}</p>
-                            <p className="text-xs font-black text-slate-400 mt-2 uppercase tracking-widest">เลข: {p.policyNo || '-'} | รอบ: {p.cycle} | เบี้ย: <span className="text-emerald-600">{formatCurrency(p.premium)}</span></p>
-                          </div>
-                          <div className="text-right bg-orange-50 px-6 py-3 rounded-2xl border border-orange-100"><p className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-1">วันต่ออายุ</p><p className="font-black text-orange-700 text-xl">{toBuddhistYear(p.endDate)}</p></div>
+                  </div>
+
+                  {/* POLICIES (RESTORED) */}
+                  {formData.status === 'ปิดการขาย' && (
+                    <div className="bg-emerald-50/50 rounded-[2rem] p-8 border-2 border-emerald-200 shadow-inner">
+                      <div className="flex justify-between items-center mb-8">
+                        <div><h3 className="font-black text-emerald-800 flex items-center gap-3 text-2xl"><Icon name="shield-check" size={32}/> กรมธรรม์ที่ซื้อแล้ว</h3></div>
+                        <button onClick={() => setIsAddingPolicy(!isAddingPolicy)} className="px-6 py-3 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 flex items-center gap-2 shadow-lg"><Icon name="plus" size={20}/> เพิ่มกรมธรรม์</button>
+                      </div>
+
+                      {isAddingPolicy && (
+                        <div className="bg-white p-6 rounded-3xl border-2 border-emerald-200 mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shadow-md animate-in fade-in">
+                          <div className="md:col-span-2"><label className="text-[10px] font-black text-slate-400 mb-1 block">ชื่อแผน</label><input type="text" value={newPolicy.planName} onChange={(e)=>setNewPolicy({...newPolicy, planName: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black" /></div>
+                          <div><label className="text-[10px] font-black text-slate-400 mb-1 block">เลขกรมธรรม์</label><input type="text" value={newPolicy.policyNo} onChange={(e)=>setNewPolicy({...newPolicy, policyNo: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black" /></div>
+                          <div><label className="text-[10px] font-black text-slate-400 mb-1 block">รอบชำระ</label><select value={newPolicy.cycle} onChange={(e)=>setNewPolicy({...newPolicy, cycle: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"><option>รายเดือน</option><option>รายปี</option></select></div>
+                          <div className="lg:col-span-2"><label className="text-[10px] font-black text-red-400 mb-1 block">วันต่ออายุ *</label><input type="date" value={newPolicy.endDate} onChange={(e)=>setNewPolicy({...newPolicy, endDate: e.target.value})} className="w-full border-2 border-orange-200 bg-orange-50 rounded-xl px-4 py-2 font-black text-orange-800" /></div>
+                          <div className="lg:col-span-2"><label className="text-[10px] font-black text-emerald-600 mb-1 block">ค่าเบี้ย</label><input type="number" value={newPolicy.premium} onChange={(e)=>setNewPolicy({...newPolicy, premium: e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black text-emerald-800" /></div>
+                          <button onClick={handleAddPolicy} className="md:col-span-2 lg:col-span-4 py-3 bg-emerald-500 text-white rounded-xl font-black mt-2">บันทึกข้อมูลกรมธรรม์</button>
                         </div>
-                      ))}
+                      )}
+
+                      {(!formData.policies || formData.policies.length === 0) ? (
+                        <div className="bg-white p-8 rounded-3xl text-center border-2 border-emerald-100 border-dashed"><p className="text-emerald-600 font-black">ยังไม่มีข้อมูลกรมธรรม์</p></div>
+                      ) : (
+                        <div className="space-y-4">
+                          {formData.policies.map((p, i) => (
+                            <div key={i} className="bg-white p-6 rounded-[2rem] border-2 border-emerald-100 flex flex-wrap justify-between items-center gap-5 shadow-sm">
+                              <div>
+                                <p className="font-black text-xl text-slate-800">{p.planName}</p>
+                                <p className="text-xs font-black text-slate-400 mt-2 uppercase tracking-widest">เลข: {p.policyNo || '-'} | รอบ: {p.cycle} | เบี้ย: <span className="text-emerald-600">{formatCurrency(p.premium)}</span></p>
+                              </div>
+                              <div className="text-right bg-orange-50 px-6 py-3 rounded-2xl border border-orange-100"><p className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-1">วันต่ออายุ</p><p className="font-black text-orange-700 text-xl">{toBuddhistYear(p.endDate)}</p></div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            <div className="lg:col-span-1">
-               <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-[2rem] p-8 text-white shadow-xl h-full flex flex-col relative overflow-hidden">
-                  <Icon name="sparkle" className="absolute top-4 right-4 text-indigo-400 opacity-50" size={64}/>
-                  <h3 className="font-black text-xl flex items-center gap-3 mb-6 z-10"><Icon name="brain" size={28}/> AI วิเคราะห์แนะนำ</h3>
-                  <div className="flex-1 bg-white/10 rounded-2xl p-6 z-10 flex flex-col justify-center">
-                    {aiInsight ? <p className="text-indigo-50 font-bold leading-relaxed">{aiInsight}</p> : <div className="text-center"><Icon name="brain" size={48} className="mx-auto mb-4 text-indigo-300 opacity-50" /><p className="text-indigo-200 font-semibold text-sm">กดวิเคราะห์ข้อมูล</p></div>}
-                  </div>
-                  <button onClick={generateAiInsight} disabled={isAiLoading} className="w-full mt-6 bg-indigo-500 hover:bg-indigo-400 text-white font-black py-4 rounded-xl shadow-lg transition z-10">{isAiLoading ? 'กำลังประมวลผล...' : 'วิเคราะห์ข้อมูลลูกค้าทันที'}</button>
-               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 lg:px-10 py-6 border-t border-slate-100 bg-white flex justify-between z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-          {deleteConfirm ? (
-             <div className="flex gap-2">
-                <button onClick={() => setDeleteConfirm(false)} className="px-6 py-3 bg-slate-100 rounded-xl font-black text-slate-600">ยกเลิก</button>
-                <button onClick={() => { onDelete(customer.id); onClose(); }} className="px-6 py-3 bg-red-600 rounded-xl font-black text-white shadow-lg">ยืนยันการลบ!</button>
-             </div>
-          ) : (
-             <button onClick={() => setDeleteConfirm(true)} className="px-6 py-3 text-red-500 hover:bg-red-50 rounded-2xl font-black transition flex items-center gap-2"><Icon name="trash" size={20}/> ลบข้อมูล</button>
-          )}
-          <div className="flex gap-4">
-            <button onClick={onClose} className="px-8 py-4 text-slate-500 hover:bg-slate-100 rounded-2xl font-black transition">ปิดหน้าต่าง</button>
-            <button onClick={handleSave} className="px-12 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition shadow-xl shadow-blue-500/40 text-lg">บันทึกการแก้ไข</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PipelineView({ customers }) {
-  return (
-    <div className="space-y-8 h-[calc(100vh-160px)] flex flex-col">
-      <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="funnel" className="text-purple-500" size={40}/> Sales Pipeline</h2><p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">บอร์ดสรุปขั้นตอนการขายของลูกค้าทั้งหมด</p></div>
-      <div className="flex gap-6 overflow-x-auto pb-6 custom-scrollbar flex-1 items-start">
-        {STATUS_LIST.map((status, idx) => {
-          const list = customers.filter(c => c.status === status);
-          return (
-            <div key={status} className="bg-slate-100/70 rounded-[2.5rem] p-6 min-w-[340px] w-[340px] border-2 border-slate-200/50 max-h-full overflow-y-auto custom-scrollbar shadow-inner">
-              <h3 className="font-black text-slate-700 mb-6 flex justify-between items-center text-xl">{status} <span className="bg-white px-3.5 py-1 rounded-xl text-sm shadow-sm">{list.length}</span></h3>
-              <div className="space-y-4">
-                {list.map(c => (
-                  <div key={c.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 border-l-8 hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1" style={{borderLeftColor: CHART_COLORS[idx % CHART_COLORS.length]}}>
-                    <p className="font-black text-lg text-slate-800">{c.name}</p>
-                    <p className="text-xs font-bold text-slate-400 mt-2 flex items-center gap-1.5"><Icon name="phone" size={12}/> {c.phone}</p>
-                    <div className="mt-4 pt-4 border-t border-slate-50"><p className="text-sm font-black text-slate-600 truncate">{c.interestedPlan || 'รอระบุแผน'}</p>{c.premium > 0 && <p className="text-sm font-black text-emerald-600 mt-2 bg-emerald-50 w-fit px-3 py-1 rounded-xl">{formatCurrency(c.premium)}</p>}</div>
-                  </div>
-                ))}
-                {list.length === 0 && <div className="border-2 border-dashed border-slate-300 rounded-[2rem] p-8 text-center text-slate-400 font-black">ไม่มีข้อมูล</div>}
+                {/* AI INSIGHT */}
+                <div className="lg:col-span-1">
+                   <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-[2rem] p-8 text-white shadow-xl h-full flex flex-col relative overflow-hidden">
+                      <Icon name="sparkle" className="absolute top-4 right-4 text-indigo-400 opacity-50" size={64}/>
+                      <h3 className="font-black text-xl flex items-center gap-3 mb-6 z-10"><Icon name="brain" size={28}/> AI วิเคราะห์แนะนำ</h3>
+                      <div className="flex-1 bg-white/10 rounded-2xl p-6 z-10 flex flex-col justify-center">
+                        {aiInsight ? <p className="text-indigo-50 font-bold leading-relaxed">{aiInsight}</p> : <div className="text-center"><Icon name="brain" size={48} className="mx-auto mb-4 text-indigo-300 opacity-50" /><p className="text-indigo-200 font-semibold text-sm">กดวิเคราะห์ข้อมูล</p></div>}
+                      </div>
+                      <button onClick={generateAiInsight} disabled={isAiLoading} className="w-full mt-6 bg-indigo-500 hover:bg-indigo-400 text-white font-black py-4 rounded-xl shadow-lg transition z-10">{isAiLoading ? 'กำลังประมวลผล...' : 'วิเคราะห์ข้อมูลลูกค้าทันที'}</button>
+                   </div>
+                </div>
               </div>
             </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
-function AnalyticsView({ customers }) {
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-  
-  const closedThisMonth = customers.filter(c => c.status === 'ปิดการขาย' && new Date(c.closedDate).getMonth() === currentMonth);
-  const revThisMonth = closedThisMonth.reduce((acc, c) => acc + Number(c.premium||0), 0);
-  const avgCase = closedThisMonth.length ? Math.round(revThisMonth / closedThisMonth.length) : 0;
-  const convRate = customers.length ? Math.round((customers.filter(c=>c.status==='ปิดการขาย').length / customers.length)*100) : 0;
-
-  const closedThisYear = customers.filter(c => c.status === 'ปิดการขาย' && new Date(c.closedDate).getFullYear() === currentYear);
-  const revThisYear = closedThisYear.reduce((acc, c) => acc + Number(c.premium||0), 0);
-
-  const monthlyData = new Array(12).fill(0);
-  closedThisYear.forEach(c => { monthlyData[new Date(c.closedDate).getMonth()] += Number(c.premium||0); });
-  const bestMonthVal = Math.max(...monthlyData);
-  const bestMonthIndex = monthlyData.indexOf(bestMonthVal);
-  const monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-  const bestMonthName = bestMonthVal > 0 ? monthNames[bestMonthIndex] : '-';
-
-  const prevMonthRev = currentMonth > 0 ? monthlyData[currentMonth - 1] : 0;
-  let growth = 0;
-  if(prevMonthRev > 0) growth = Math.round(((revThisMonth - prevMonthRev) / prevMonthRev) * 100);
-  else if (revThisMonth > 0) growth = 100;
-
-  const kpis = [
-    { title: 'รายได้เดือนนี้', val: formatCurrency(revThisMonth), color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-    { title: 'รายได้รวมทั้งปี', val: formatCurrency(revThisYear), color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
-    { title: 'เคสที่ปิดได้ (ด)', val: `${closedThisMonth.length} เคส`, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
-    { title: 'เฉลี่ยต่อเคส (ด)', val: formatCurrency(avgCase), color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100' },
-    { title: 'Conversion Rate', val: `${convRate}%`, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
-    { title: 'Best Month', val: bestMonthName, color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-100' },
-    { title: 'Growth (YoM)', val: `${growth > 0 ? '+'+growth : growth}%`, color: growth >= 0 ? 'text-emerald-600' : 'text-red-600', bg: growth >= 0 ? 'bg-emerald-50' : 'bg-red-50', border: growth >= 0 ? 'border-emerald-100' : 'border-red-100' },
-  ];
-
-  return (
-    <div className="space-y-10">
-      <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="trend-up" className="text-pink-500" size={40}/> Analytics & KPI</h2><p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">วิเคราะห์ผลงาน สถิติรายได้ และการเติบโตของคุณ</p></div>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-        {kpis.map((k,i) => (
-          <div key={i} className={`p-6 md:p-8 rounded-[2.5rem] border-2 ${k.border} ${k.bg} shadow-sm hover:shadow-md transition-all transform hover:-translate-y-1`}>
-            <p className="text-[10px] md:text-xs font-black text-slate-500 mb-2 md:mb-3 uppercase tracking-widest">{k.title}</p>
-            <h3 className={`text-2xl md:text-4xl font-black ${k.color}`}>{k.val}</h3>
-          </div>
-        ))}
-      </div>
-      <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 h-[500px]">
-        <h3 className="font-black text-slate-800 mb-8 text-2xl">จำนวนลูกค้าในแต่ละขั้นตอน</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={STATUS_LIST.map(s => ({ name: s, count: customers.filter(c=>c.status===s).length }))}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontWeight: '900'}} />
-            <RechartsTooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 'bold'}}/>
-            <Bar dataKey="count" fill="#3b82f6" radius={[16,16,0,0]}>
-              {STATUS_LIST.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-function RankingView({ users, customers, currentUser }) {
-  const ranking = users.filter(u => u.role === 'agent' && u.team === currentUser.team).map(u => {
-    const rev = customers.filter(c => c.agent_id === u.id && c.status === 'ปิดการขาย').reduce((acc,c)=>acc+Number(c.premium||0),0);
-    return { ...u, rev };
-  }).sort((a,b) => b.rev - a.rev);
-
-  return (
-    <div className="max-w-4xl mx-auto space-y-10">
-      <div className="text-center">
-        <div className="w-24 h-24 bg-gradient-to-br from-yellow-300 to-orange-400 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-yellow-500/40 transform rotate-3"><Icon name="trophy" size={48}/></div>
-        <h2 className="text-4xl font-black text-slate-800">Team Ranking</h2>
-        <p className="text-slate-500 font-bold mt-2 text-sm uppercase tracking-widest bg-slate-200 inline-block px-4 py-1 rounded-full">ทีม: {currentUser.team}</p>
-      </div>
-      <div className="bg-white rounded-[3rem] shadow-xl p-10">
-        {ranking.map((u, idx) => (
-          <div key={u.id} className={`flex items-center justify-between p-6 mb-5 rounded-3xl border-2 transition-all hover:-translate-y-1 hover:shadow-lg ${idx === 0 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200' : 'bg-slate-50 border-slate-100'}`}>
-            <div className="flex items-center gap-6">
-              <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center font-black text-2xl ${idx === 0 ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg shadow-yellow-500/40' : idx === 1 ? 'bg-slate-200 text-slate-500' : idx === 2 ? 'bg-orange-100 text-orange-700' : 'bg-white border-2 border-slate-200 text-slate-400'}`}>{idx + 1}</div>
-              <div><p className="font-black text-slate-800 text-2xl">{u.name} {u.id === currentUser.id && <span className="text-[10px] bg-blue-600 text-white px-3 py-1 rounded-full ml-3 shadow-sm align-middle uppercase tracking-widest">คุณ</span>}</p></div>
+            <div className="px-6 lg:px-10 py-6 border-t border-slate-100 bg-white flex justify-between z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
+              {deleteConfirm ? (
+                 <div className="flex gap-2">
+                    <button onClick={() => setDeleteConfirm(false)} className="px-6 py-3 bg-slate-100 rounded-xl font-black text-slate-600">ยกเลิก</button>
+                    <button onClick={() => { onDelete(customer.id); onClose(); }} className="px-6 py-3 bg-red-600 rounded-xl font-black text-white shadow-lg">ยืนยันการลบ!</button>
+                 </div>
+              ) : (
+                 <button onClick={() => setDeleteConfirm(true)} className="px-6 py-3 text-red-500 hover:bg-red-50 rounded-2xl font-black transition flex items-center gap-2"><Icon name="trash" size={20}/> ลบข้อมูล</button>
+              )}
+              <div className="flex gap-4">
+                <button onClick={onClose} className="px-8 py-4 text-slate-500 hover:bg-slate-100 rounded-2xl font-black transition">ปิดหน้าต่าง</button>
+                <button onClick={handleSave} className="px-12 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition shadow-xl shadow-blue-500/40 text-lg">บันทึกการแก้ไข</button>
+              </div>
             </div>
-            <h3 className={`text-3xl font-black ${idx === 0 ? 'text-orange-600' : 'text-slate-700'}`}>{formatCurrency(u.rev)}</h3>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AIAssistantView() {
-  return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 rounded-[3rem] p-12 lg:p-16 text-center shadow-2xl text-white relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
-        <Icon name="brain" size={80} className="mx-auto mb-8 text-indigo-300 animate-pulse" />
-        <h2 className="text-4xl lg:text-5xl font-black mb-4 relative z-10">Gemini AI Assistant</h2>
-        <p className="text-indigo-200 font-bold text-lg max-w-xl mx-auto relative z-10 leading-relaxed">มีอะไรให้ช่วยไหม? ให้ AI วิเคราะห์แนวทางปิดการขาย สร้างสคริปต์ หรือเลือกแผนให้ตรงใจลูกค้าได้เลย!</p>
-        <div className="mt-12 bg-white/10 p-4 rounded-3xl flex flex-col md:flex-row gap-4 backdrop-blur-xl border border-white/20 relative z-10 shadow-inner">
-          <input type="text" placeholder="พิมพ์ข้อความที่นี่..." className="flex-1 bg-transparent border-none text-white outline-none placeholder-indigo-300 font-bold px-4 py-2" />
-          <button className="bg-indigo-500 px-8 py-4 rounded-2xl font-black hover:bg-indigo-400 shadow-lg transition text-lg">ส่งให้ AI คิด</button>
         </div>
-      </div>
-    </div>
-  );
-}
+      );
+    }
 
-function AdminHomeView({ users, customers }) {
-  const agents = users.filter(u => u.role === 'agent');
-  const closedCases = customers.filter(c => c.status === 'ปิดการขาย');
-  const totalRev = closedCases.reduce((acc, c) => acc + Number(c.premium||0), 0);
-
-  return (
-    <div className="space-y-10">
-      <div className="bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 rounded-[3rem] p-12 text-white shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
-        <h2 className="text-5xl font-black mb-3 relative z-10">Admin Dashboard</h2>
-        <p className="text-purple-200 font-bold uppercase tracking-widest text-sm relative z-10">หน้าต่างสรุปผลสำหรับผู้บริหาร</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12 relative z-10">
-          <div className="bg-white/10 p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ยอดขายรวมบริษัท</p><h3 className="text-5xl font-black text-amber-400">{formatCurrency(totalRev)}</h3></div>
-          <div className="bg-white/10 p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ตัวแทนทั้งหมด</p><h3 className="text-5xl font-black text-blue-300">{agents.length} <span className="text-2xl font-bold">คน</span></h3></div>
-          <div className="bg-white/10 p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ฐานลูกค้ารวมทั้งหมด</p><h3 className="text-5xl font-black text-emerald-400">{customers.length} <span className="text-2xl font-bold">ราย</span></h3></div>
-        </div>
-      </div>
-      <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 p-10">
-        <h3 className="font-black text-slate-800 text-3xl mb-8 flex items-center gap-3"><Icon name="users" className="text-blue-500"/> รายชื่อตัวแทน (Agents)</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest"><tr><th className="px-6 py-5 rounded-l-2xl">ชื่อตัวแทน</th><th className="px-6 py-5">ทีม</th><th className="px-6 py-5">เป้าหมาย (รายเดือน)</th><th className="px-6 py-5 rounded-r-2xl text-center">ลูกค้าที่ดูแล</th></tr></thead>
-            <tbody className="divide-y divide-slate-50">
-              {agents.map(a => (
-                <tr key={a.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-6 py-6 font-black text-slate-800 text-lg">{a.name}</td>
-                  <td className="px-6 py-6"><span className="px-4 py-1.5 bg-purple-100 text-purple-700 rounded-xl font-black text-xs uppercase tracking-widest">{a.team}</span></td>
-                  <td className="px-6 py-6 font-black text-orange-600 text-lg">{formatCurrency(a.targetRevenue)}</td>
-                  <td className="px-6 py-6 font-black text-blue-600 text-xl text-center">{customers.filter(c=>c.agent_id===a.id).length}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminCustomersView({ customers, users, updateCustomer, deleteCustomer }) {
-  const [search, setSearch] = useState('');
-  const filtered = customers.filter(c => c.name.includes(search) || c.phone.includes(search));
-
-  return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-        <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={40}/> ฐานข้อมูลรวม (Admin)</h2></div>
-        <div className="w-full md:w-96 relative"><Icon name="magnifying-glass" className="absolute left-5 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-14 pr-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-bold focus:border-emerald-500" /></div>
-      </div>
-      <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden p-6">
-        <table className="w-full text-left whitespace-nowrap">
-          <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest"><tr><th className="px-6 py-5 rounded-l-2xl">ชื่อลูกค้า</th><th className="px-6 py-5">เบอร์โทร</th><th className="px-6 py-5">สถานะ</th><th className="px-6 py-5">ตัวแทนผู้ดูแล</th><th className="px-6 py-5 text-right rounded-r-2xl">ยอดเบี้ย (ถ้ามี)</th></tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {filtered.map(c => {
-              const agent = users.find(u => u.id === c.agent_id);
+    // --- PIPELINE VIEW ---
+    function PipelineView({ customers }) {
+      return (
+        <div className="space-y-8 h-[calc(100vh-160px)] flex flex-col">
+          <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="funnel" className="text-purple-500" size={40}/> Sales Pipeline</h2><p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">บอร์ดสรุปขั้นตอนการขายของลูกค้าทั้งหมด</p></div>
+          <div className="flex gap-6 overflow-x-auto pb-6 custom-scrollbar flex-1 items-start">
+            {STATUS_LIST.map((status, idx) => {
+              const list = customers.filter(c => c.status === status);
               return (
-                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-5 font-black text-slate-800">{c.name}</td>
-                  <td className="px-6 py-5 text-slate-500 font-bold">{c.phone}</td>
-                  <td className="px-6 py-5"><span className="px-3 py-1.5 rounded-xl text-xs font-black border-2">{c.status}</span></td>
-                  <td className="px-6 py-5 text-blue-600 font-black">{agent ? agent.name : 'Unknown'}</td>
-                  <td className="px-6 py-5 text-right font-black text-emerald-600">{formatCurrency(c.premium)}</td>
-                </tr>
-              )
+                <div key={status} className="bg-slate-100/70 rounded-[2.5rem] p-6 min-w-[340px] w-[340px] border-2 border-slate-200/50 max-h-full overflow-y-auto custom-scrollbar shadow-inner">
+                  <h3 className="font-black text-slate-700 mb-6 flex justify-between items-center text-xl">{status} <span className="bg-white px-3.5 py-1 rounded-xl text-sm shadow-sm">{list.length}</span></h3>
+                  <div className="space-y-4">
+                    {list.map(c => (
+                      <div key={c.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 border-l-8 hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1" style={{borderLeftColor: CHART_COLORS[idx % CHART_COLORS.length]}}>
+                        <p className="font-black text-lg text-slate-800">{c.name}</p>
+                        <p className="text-xs font-bold text-slate-400 mt-2 flex items-center gap-1.5"><Icon name="phone" size={12}/> {c.phone}</p>
+                        <div className="mt-4 pt-4 border-t border-slate-50"><p className="text-sm font-black text-slate-600 truncate">{c.interestedPlan || 'รอระบุแผน'}</p>{c.premium > 0 && <p className="text-sm font-black text-emerald-600 mt-2 bg-emerald-50 w-fit px-3 py-1 rounded-xl">{formatCurrency(c.premium)}</p>}</div>
+                      </div>
+                    ))}
+                    {list.length === 0 && <div className="border-2 border-dashed border-slate-300 rounded-[2rem] p-8 text-center text-slate-400 font-black">ไม่มีข้อมูล</div>}
+                  </div>
+                </div>
+              );
             })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+          </div>
+        </div>
+      );
+    }
 
-function SettingsView({ user, handleUpdateUser, showToast }) {
-  const [formData, setFormData] = useState({ name: user.name, targetRevenue: user.targetRevenue || 100000 });
-  return (
-    <div className="max-w-2xl mx-auto p-12 bg-white rounded-[3rem] shadow-sm border border-slate-100 text-center">
-      <Icon name="gear" size={64} className="mx-auto text-slate-300 mb-6"/>
-      <h2 className="text-3xl font-black mb-8">ตั้งค่าโปรไฟล์</h2>
-      <div className="space-y-6 text-left">
-        <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อ - นามสกุล</label><input type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
-        {user.role === 'agent' && (
-          <div><label className="text-xs font-black block mb-2 text-slate-400">เป้ายอดขายต่อเดือน</label><input type="number" value={formData.targetRevenue} onChange={e=>setFormData({...formData, targetRevenue: Number(e.target.value)})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
-        )}
-        <button onClick={() => { handleUpdateUser({...user, ...formData}); showToast('บันทึกการตั้งค่าโปรไฟล์เรียบร้อย!'); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-lg hover:bg-slate-800 transition">บันทึกการเปลี่ยนแปลง</button>
-      </div>
-    </div>
-  );
-}
+    // --- ANALYTICS VIEW (FULL VERSION RESTORED) ---
+    function AnalyticsView({ customers }) {
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      
+      const closedThisMonth = customers.filter(c => c.status === 'ปิดการขาย' && new Date(c.closedDate).getMonth() === currentMonth);
+      const revThisMonth = closedThisMonth.reduce((acc, c) => acc + Number(c.premium||0), 0);
+      const avgCase = closedThisMonth.length ? Math.round(revThisMonth / closedThisMonth.length) : 0;
+      const convRate = customers.length ? Math.round((customers.filter(c=>c.status==='ปิดการขาย').length / customers.length)*100) : 0;
 
-// Mount App
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<NovaCRMApp />);
-```
+      const closedThisYear = customers.filter(c => c.status === 'ปิดการขาย' && new Date(c.closedDate).getFullYear() === currentYear);
+      const revThisYear = closedThisYear.reduce((acc, c) => acc + Number(c.premium||0), 0);
 
+      const monthlyData = new Array(12).fill(0);
+      closedThisYear.forEach(c => { monthlyData[new Date(c.closedDate).getMonth()] += Number(c.premium||0); });
+      const bestMonthVal = Math.max(...monthlyData);
+      const bestMonthIndex = monthlyData.indexOf(bestMonthVal);
+      const monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      const bestMonthName = bestMonthVal > 0 ? monthNames[bestMonthIndex] : '-';
+
+      const prevMonthRev = currentMonth > 0 ? monthlyData[currentMonth - 1] : 0;
+      let growth = 0;
+      if(prevMonthRev > 0) growth = Math.round(((revThisMonth - prevMonthRev) / prevMonthRev) * 100);
+      else if (revThisMonth > 0) growth = 100;
+
+      const kpis = [
+        { title: 'รายได้เดือนนี้', val: formatCurrency(revThisMonth), color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+        { title: 'รายได้รวมทั้งปี', val: formatCurrency(revThisYear), color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
+        { title: 'เคสที่ปิดได้ (ด)', val: `${closedThisMonth.length} เคส`, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+        { title: 'เฉลี่ยต่อเคส (ด)', val: formatCurrency(avgCase), color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100' },
+        { title: 'Conversion Rate', val: `${convRate}%`, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
+        { title: 'Best Month', val: bestMonthName, color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-100' },
+        { title: 'Growth (YoM)', val: `${growth > 0 ? '+'+growth : growth}%`, color: growth >= 0 ? 'text-emerald-600' : 'text-red-600', bg: growth >= 0 ? 'bg-emerald-50' : 'bg-red-50', border: growth >= 0 ? 'border-emerald-100' : 'border-red-100' },
+      ];
+
+      return (
+        <div className="space-y-10">
+          <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="trend-up" className="text-pink-500" size={40}/> Analytics & KPI</h2><p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">วิเคราะห์ผลงาน สถิติรายได้ และการเติบโตของคุณ</p></div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+            {kpis.map((k,i) => (
+              <div key={i} className={`p-6 md:p-8 rounded-[2.5rem] border-2 ${k.border} ${k.bg} shadow-sm hover:shadow-md transition-all transform hover:-translate-y-1`}>
+                <p className="text-[10px] md:text-xs font-black text-slate-500 mb-2 md:mb-3 uppercase tracking-widest">{k.title}</p>
+                <h3 className={`text-2xl md:text-4xl font-black ${k.color}`}>{k.val}</h3>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 h-[500px]">
+            <h3 className="font-black text-slate-800 mb-8 text-2xl">จำนวนลูกค้าในแต่ละขั้นตอน</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={STATUS_LIST.map(s => ({ name: s, count: customers.filter(c=>c.status===s).length }))}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontWeight: '900'}} />
+                <RechartsTooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 'bold'}}/>
+                <Bar dataKey="count" fill="#3b82f6" radius={[16,16,0,0]}>
+                  {STATUS_LIST.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      );
+    }
+
+    // --- TEAM RANKING VIEW (RESTORED) ---
+    function RankingView({ users, customers, currentUser }) {
+      const ranking = users.filter(u => u.role === 'agent' && u.team === currentUser.team).map(u => {
+        const rev = customers.filter(c => c.agent_id === u.id && c.status === 'ปิดการขาย').reduce((acc,c)=>acc+Number(c.premium||0),0);
+        return { ...u, rev };
+      }).sort((a,b) => b.rev - a.rev);
+
+      return (
+        <div className="max-w-4xl mx-auto space-y-10">
+          <div className="text-center">
+            <div className="w-24 h-24 bg-gradient-to-br from-yellow-300 to-orange-400 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-yellow-500/40 transform rotate-3"><Icon name="trophy" size={48}/></div>
+            <h2 className="text-4xl font-black text-slate-800">Team Ranking</h2>
+            <p className="text-slate-500 font-bold mt-2 text-sm uppercase tracking-widest bg-slate-200 inline-block px-4 py-1 rounded-full">ทีม: {currentUser.team}</p>
+          </div>
+          <div className="bg-white rounded-[3rem] shadow-xl p-10">
+            {ranking.map((u, idx) => (
+              <div key={u.id} className={`flex items-center justify-between p-6 mb-5 rounded-3xl border-2 transition-all hover:-translate-y-1 hover:shadow-lg ${idx === 0 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200' : 'bg-slate-50 border-slate-100'}`}>
+                <div className="flex items-center gap-6">
+                  <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center font-black text-2xl ${idx === 0 ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-lg shadow-yellow-500/40' : idx === 1 ? 'bg-slate-200 text-slate-500' : idx === 2 ? 'bg-orange-100 text-orange-700' : 'bg-white border-2 border-slate-200 text-slate-400'}`}>{idx + 1}</div>
+                  <div><p className="font-black text-slate-800 text-2xl">{u.name} {u.id === currentUser.id && <span className="text-[10px] bg-blue-600 text-white px-3 py-1 rounded-full ml-3 shadow-sm align-middle uppercase tracking-widest">คุณ</span>}</p></div>
+                </div>
+                <h3 className={`text-3xl font-black ${idx === 0 ? 'text-orange-600' : 'text-slate-700'}`}>{formatCurrency(u.rev)}</h3>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function AIAssistantView() {
+      return (
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 rounded-[3rem] p-12 lg:p-16 text-center shadow-2xl text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
+            <Icon name="brain" size={80} className="mx-auto mb-8 text-indigo-300 animate-pulse" />
+            <h2 className="text-4xl lg:text-5xl font-black mb-4 relative z-10">Gemini AI Assistant</h2>
+            <p className="text-indigo-200 font-bold text-lg max-w-xl mx-auto relative z-10 leading-relaxed">มีอะไรให้ช่วยไหม? ให้ AI วิเคราะห์แนวทางปิดการขาย สร้างสคริปต์ หรือเลือกแผนให้ตรงใจลูกค้าได้เลย!</p>
+            <div className="mt-12 bg-white/10 p-4 rounded-3xl flex flex-col md:flex-row gap-4 backdrop-blur-xl border border-white/20 relative z-10 shadow-inner">
+              <input type="text" placeholder="พิมพ์ข้อความที่นี่..." className="flex-1 bg-transparent border-none text-white outline-none placeholder-indigo-300 font-bold px-4 py-2" />
+              <button className="bg-indigo-500 px-8 py-4 rounded-2xl font-black hover:bg-indigo-400 shadow-lg transition text-lg">ส่งให้ AI คิด</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function AdminHomeView({ users, customers }) {
+      const agents = users.filter(u => u.role === 'agent');
+      const closedCases = customers.filter(c => c.status === 'ปิดการขาย');
+      const totalRev = closedCases.reduce((acc, c) => acc + Number(c.premium||0), 0);
+
+      return (
+        <div className="space-y-10">
+          <div className="bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 rounded-[3rem] p-12 text-white shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
+            <h2 className="text-5xl font-black mb-3 relative z-10">Admin Dashboard</h2>
+            <p className="text-purple-200 font-bold uppercase tracking-widest text-sm relative z-10">หน้าต่างสรุปผลสำหรับผู้บริหาร</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12 relative z-10">
+              <div className="bg-white/10 p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ยอดขายรวมบริษัท</p><h3 className="text-5xl font-black text-amber-400">{formatCurrency(totalRev)}</h3></div>
+              <div className="bg-white/10 p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ตัวแทนทั้งหมด</p><h3 className="text-5xl font-black text-blue-300">{agents.length} <span className="text-2xl font-bold">คน</span></h3></div>
+              <div className="bg-white/10 p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ฐานลูกค้ารวมทั้งหมด</p><h3 className="text-5xl font-black text-emerald-400">{customers.length} <span className="text-2xl font-bold">ราย</span></h3></div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 p-10">
+            <h3 className="font-black text-slate-800 text-3xl mb-8 flex items-center gap-3"><Icon name="users" className="text-blue-500"/> รายชื่อตัวแทน (Agents)</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest"><tr><th className="px-6 py-5 rounded-l-2xl">ชื่อตัวแทน</th><th className="px-6 py-5">ทีม</th><th className="px-6 py-5">เป้าหมาย (รายเดือน)</th><th className="px-6 py-5 rounded-r-2xl text-center">ลูกค้าที่ดูแล</th></tr></thead>
+                <tbody className="divide-y divide-slate-50">
+                  {agents.map(a => (
+                    <tr key={a.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-6 font-black text-slate-800 text-lg">{a.name}</td>
+                      <td className="px-6 py-6"><span className="px-4 py-1.5 bg-purple-100 text-purple-700 rounded-xl font-black text-xs uppercase tracking-widest">{a.team}</span></td>
+                      <td className="px-6 py-6 font-black text-orange-600 text-lg">{formatCurrency(a.targetRevenue)}</td>
+                      <td className="px-6 py-6 font-black text-blue-600 text-xl text-center">{customers.filter(c=>c.agent_id===a.id).length}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function AdminCustomersView({ customers, users, updateCustomer, deleteCustomer }) {
+      const [search, setSearch] = useState('');
+      const filtered = customers.filter(c => c.name.includes(search) || c.phone.includes(search));
+
+      return (
+        <div className="space-y-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+            <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={40}/> ฐานข้อมูลรวม (Admin)</h2></div>
+            <div className="w-full md:w-96 relative"><Icon name="magnifying-glass" className="absolute left-5 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-14 pr-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-bold focus:border-emerald-500" /></div>
+          </div>
+          <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden p-6">
+            <table className="w-full text-left whitespace-nowrap">
+              <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest"><tr><th className="px-6 py-5 rounded-l-2xl">ชื่อลูกค้า</th><th className="px-6 py-5">เบอร์โทร</th><th className="px-6 py-5">สถานะ</th><th className="px-6 py-5">ตัวแทนผู้ดูแล</th><th className="px-6 py-5 text-right rounded-r-2xl">ยอดเบี้ย (ถ้ามี)</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map(c => {
+                  const agent = users.find(u => u.id === c.agent_id);
+                  return (
+                    <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-5 font-black text-slate-800">{c.name}</td>
+                      <td className="px-6 py-5 text-slate-500 font-bold">{c.phone}</td>
+                      <td className="px-6 py-5"><span className="px-3 py-1.5 rounded-xl text-xs font-black border-2">{c.status}</span></td>
+                      <td className="px-6 py-5 text-blue-600 font-black">{agent ? agent.name : 'Unknown'}</td>
+                      <td className="px-6 py-5 text-right font-black text-emerald-600">{formatCurrency(c.premium)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    function SettingsView({ user, handleUpdateUser, showToast }) {
+      const [formData, setFormData] = useState({ name: user.name, targetRevenue: user.targetRevenue || 100000 });
+      return (
+        <div className="max-w-2xl mx-auto p-12 bg-white rounded-[3rem] shadow-sm border border-slate-100 text-center">
+          <Icon name="gear" size={64} className="mx-auto text-slate-300 mb-6"/>
+          <h2 className="text-3xl font-black mb-8">ตั้งค่าโปรไฟล์</h2>
+          <div className="space-y-6 text-left">
+            <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อ - นามสกุล</label><input type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+            {user.role === 'agent' && (
+              <div><label className="text-xs font-black block mb-2 text-slate-400">เป้ายอดขายต่อเดือน</label><input type="number" value={formData.targetRevenue} onChange={e=>setFormData({...formData, targetRevenue: Number(e.target.value)})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+            )}
+            <button onClick={() => { handleUpdateUser({...user, ...formData}); showToast('บันทึกการตั้งค่าโปรไฟล์เรียบร้อย!'); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-lg hover:bg-slate-800 transition">บันทึกการเปลี่ยนแปลง</button>
+          </div>
+        </div>
+      );
+    }
+
+    // Mount App
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<NovaCRMApp />);
   </script>
 </body>
 </html>
