@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -8,19 +9,20 @@
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Phosphor Icons (แทน Lucide เพื่อความเสถียรบน HTML) -->
+  <!-- Phosphor Icons -->
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-  <!-- React & ReactDOM -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-
-  <!-- Recharts & PropTypes สำหรับกราฟ -->
-  <script crossorigin src="https://unpkg.com/prop-types/prop-types.min.js"></script>
-  <script crossorigin src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+  <!-- React & ReactDOM (เวอร์ชันที่เสถียรที่สุดสำหรับ HTML เดี่ยว) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
   <!-- Babel Compiler -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- FIREBASE (เปลี่ยนมาใช้เวอร์ชัน Compat เพื่อป้องกันปัญหาจอขาวบน Safari/iPad) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700;800&display=swap');
@@ -31,9 +33,7 @@
     .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   </style>
 
-  <!-- ========================================== -->
-  <!-- YOUR FIREBASE CONFIGURATION                -->
-  <!-- ========================================== -->
+  <!-- YOUR FIREBASE CONFIG -->
   <script>
     window.MY_FIREBASE_CONFIG = {
       apiKey: "AIzaSyA6pLMExFN2d7oVQKLldcB_ahB5-o4zw_E",
@@ -45,34 +45,12 @@
       measurementId: "G-4DWBTKPNP3"
     };
   </script>
-
-  <!-- Firebase Integration -->
-  <script type="module">
-    try {
-      import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js").then(appModule => {
-        import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js").then(authModule => {
-          import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js").then(firestoreModule => {
-            window.FirebaseAPI = { 
-              initializeApp: appModule.initializeApp, getAuth: authModule.getAuth, 
-              signInWithCustomToken: authModule.signInWithCustomToken, signInAnonymously: authModule.signInAnonymously, 
-              onAuthStateChanged: authModule.onAuthStateChanged, getFirestore: firestoreModule.getFirestore, 
-              collection: firestoreModule.collection, doc: firestoreModule.doc, 
-              setDoc: firestoreModule.setDoc, deleteDoc: firestoreModule.deleteDoc, onSnapshot: firestoreModule.onSnapshot 
-            };
-          });
-        });
-      });
-    } catch (e) {
-      console.warn("Firebase blocked. Running in offline/memory mode.");
-    }
-  </script>
 </head>
 <body class="text-slate-800">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
-    const { BarChart, Bar, XAxis, CartesianGrid, Tooltip: RechartsTooltip, ResponsiveContainer, Cell } = window.Recharts;
 
     // --- CONFIG & CONSTANTS ---
     const ADMIN_EMAIL = "toei.mar168@gmail.com";
@@ -97,19 +75,35 @@
     const Icon = ({ name, size = 20, className = "" }) => <i className={`ph ph-${name} ${className}`} style={{ fontSize: size }}></i>;
     const IconFill = ({ name, size = 20, className = "" }) => <i className={`ph-fill ph-${name} ${className}`} style={{ fontSize: size }}></i>;
 
+    // --- CUSTOM CSS BAR CHART (แทน Recharts เพื่อแก้ปัญหาจอขาว) ---
+    function CSSBarChart({ data }) {
+      const maxCount = Math.max(...data.map(d => d.count), 1);
+      return (
+        <div className="flex items-end justify-around h-[350px] pt-10 border-b-2 border-slate-100 pb-2">
+          {data.map((d, i) => (
+             <div key={i} className="flex flex-col items-center w-full group cursor-pointer">
+               <div className="relative w-12 md:w-20 rounded-t-xl transition-all duration-700 ease-out flex items-end justify-center pb-2" 
+                    style={{height: `${(d.count / maxCount) * 100}%`, minHeight: '30px', backgroundColor: CHART_COLORS[i % CHART_COLORS.length]}}>
+                 <span className="font-black text-white text-sm">{d.count}</span>
+               </div>
+               <span className="text-xs md:text-sm font-black text-slate-500 mt-4">{d.name}</span>
+             </div>
+          ))}
+        </div>
+      );
+    }
+
     // ============================================================================
     // MAIN APP
     // ============================================================================
     function NovaCRMApp() {
       // System States
       const [appState, setAppState] = useState('loading');
-      const [isCloud, setIsCloud] = useState(false);
       const [db, setDb] = useState(null);
-      const [appIdStr, setAppIdStr] = useState('nova-crm-production');
       const [toastMsg, setToastMsg] = useState(null);
       
       // Data States
-      const [users, setUsers] = useState([{ id: 'admin1', name: 'Admin', email: ADMIN_EMAIL, password: 'password', role: 'admin', team: 'HQ Management' }]);
+      const [users, setUsers] = useState([]);
       const [customers, setCustomers] = useState([]);
       const [tasks, setTasks] = useState([]);
       
@@ -123,43 +117,37 @@
       // --- INITIALIZATION ---
       useEffect(() => {
         const initSystem = async () => {
-          let config = window.MY_FIREBASE_CONFIG; // <--- ดึง Config ของคุณมาใช้
-
-          // เช็คเผื่อรันใน Environment จำลอง
-          if (typeof window !== 'undefined' && window.__firebase_config && !config) {
-              config = JSON.parse(window.__firebase_config);
-          }
-          if (typeof window !== 'undefined' && window.__app_id) {
-              setAppIdStr(window.__app_id);
-          }
-
-          let retries = 0;
-          while (!window.FirebaseAPI && retries < 15) { await new Promise(r => setTimeout(r, 100)); retries++; }
-
-          if (!window.FirebaseAPI || !config || Object.keys(config).length === 0) {
-            setIsCloud(false); setAppState('ready'); return;
-          }
-
           try {
-            const app = window.FirebaseAPI.initializeApp(config);
-            const auth = window.FirebaseAPI.getAuth(app);
-            const firestoreDb = window.FirebaseAPI.getFirestore(app);
-            setDb(firestoreDb);
-
-            // Authentication 
-            if (typeof window !== 'undefined' && window.__initial_auth_token) {
-                await window.FirebaseAPI.signInWithCustomToken(auth, window.__initial_auth_token);
-            } else {
-                await window.FirebaseAPI.signInAnonymously(auth);
+            // ตรวจสอบว่ามี config ไหม
+            if (!window.MY_FIREBASE_CONFIG) {
+                console.error("No Firebase Config found");
+                setAppState('ready');
+                return;
             }
 
-            window.FirebaseAPI.onAuthStateChanged(auth, user => {
-                if(user) { setIsCloud(true); setAppState('ready'); }
+            // ถ้ายังไม่เคย Init ให้ทำการ Init
+            if (!firebase.apps.length) {
+                firebase.initializeApp(window.MY_FIREBASE_CONFIG);
+            }
+
+            const firestoreDb = firebase.firestore();
+            setDb(firestoreDb);
+
+            // Auth (Anonymous)
+            firebase.auth().onAuthStateChanged(user => {
+                if(!user) {
+                    firebase.auth().signInAnonymously().catch(err => {
+                        console.error("Auth Error:", err);
+                        setAppState('ready');
+                    });
+                } else {
+                    setAppState('ready');
+                }
             });
-          } catch(err) { 
-            console.error("Firebase Connection Error:", err);
-            setIsCloud(false); 
-            setAppState('ready'); 
+
+          } catch (err) {
+            console.error("System Init Error:", err);
+            setAppState('ready');
           }
         };
         initSystem();
@@ -167,61 +155,60 @@
 
       // --- FIRESTORE SUBSCRIPTIONS ---
       useEffect(() => {
-        if(!isCloud || !db) return;
-        const c_users = window.FirebaseAPI.collection(db, 'artifacts', appIdStr, 'public', 'data', 'crm_users');
-        const c_custs = window.FirebaseAPI.collection(db, 'artifacts', appIdStr, 'public', 'data', 'crm_customers');
-        const c_tasks = window.FirebaseAPI.collection(db, 'artifacts', appIdStr, 'public', 'data', 'crm_tasks');
-
-        const unsubU = window.FirebaseAPI.onSnapshot(c_users, snap => { const arr = []; snap.forEach(d => arr.push(d.data())); if(arr.length > 0) setUsers(arr); });
-        const unsubC = window.FirebaseAPI.onSnapshot(c_custs, snap => { const arr = []; snap.forEach(d => arr.push(d.data())); setCustomers(arr); });
-        const unsubT = window.FirebaseAPI.onSnapshot(c_tasks, snap => { const arr = []; snap.forEach(d => arr.push(d.data())); setTasks(arr); });
+        if(!db) return;
+        
+        // Subscription (ดึงข้อมูลลงเครื่อง)
+        const unsubU = db.collection('crm_users').onSnapshot(snap => { const arr = []; snap.forEach(d => arr.push(d.data())); setUsers(arr); });
+        const unsubC = db.collection('crm_customers').onSnapshot(snap => { const arr = []; snap.forEach(d => arr.push(d.data())); setCustomers(arr); });
+        const unsubT = db.collection('crm_tasks').onSnapshot(snap => { const arr = []; snap.forEach(d => arr.push(d.data())); setTasks(arr); });
+        
         return () => { unsubU(); unsubC(); unsubT(); };
-      }, [isCloud, db, appIdStr]);
+      }, [db]);
 
       // --- DATA WRITERS ---
-      const writeData = async (collectionName, id, data, localSetter) => {
-        if(isCloud && db) {
+      const writeData = async (collectionName, id, data) => {
+        if(db) {
           try {
-              const ref = window.FirebaseAPI.doc(db, 'artifacts', appIdStr, 'public', 'data', collectionName, id);
-              await window.FirebaseAPI.setDoc(ref, data);
+              await db.collection(collectionName).doc(id).set(data);
           } catch(e) {
               console.error("Write error:", e);
               showToast("พบปัญหาบันทึกข้อมูล โปรดเช็ค Firebase Rules");
           }
-        } else {
-          localSetter(prev => { const exists = prev.find(item => item.id === id); return exists ? prev.map(item => item.id === id ? data : item) : [...prev, data]; });
         }
       };
 
-      const removeData = async (collectionName, id, localSetter) => {
-        if(isCloud && db) {
-          const ref = window.FirebaseAPI.doc(db, 'artifacts', appIdStr, 'public', 'data', collectionName, id);
-          await window.FirebaseAPI.deleteDoc(ref);
-        } else localSetter(prev => prev.filter(item => item.id !== id));
+      const removeData = async (collectionName, id) => {
+        if(db) {
+          try {
+              await db.collection(collectionName).doc(id).delete();
+          } catch(e) {
+              console.error("Delete error:", e);
+          }
+        }
       };
 
       // --- ACTIONS ---
       const handleAuthSuccess = async (user) => {
-        if(!users.find(u => u.id === user.id)) await writeData('crm_users', user.id, user, setUsers);
+        if(!users.find(u => u.id === user.id)) await writeData('crm_users', user.id, user);
         setCurrentUser(user);
         setCurrentRoute('home');
       };
 
       const handleUpdateUser = async (updatedUser) => {
-        await writeData('crm_users', updatedUser.id, updatedUser, setUsers);
+        await writeData('crm_users', updatedUser.id, updatedUser);
         if(currentUser.id === updatedUser.id) setCurrentUser(updatedUser);
       };
 
-      const addCustomer = (data) => { writeData('crm_customers', data.id, { ...data, agent_id: currentUser.id }, setCustomers); showToast('บันทึกข้อมูลลูกค้าสำเร็จ!'); };
-      const updateCustomer = (data) => { writeData('crm_customers', data.id, data, setCustomers); showToast('อัปเดตข้อมูลลูกค้าเรียบร้อย!'); };
-      const deleteCustomer = (id) => { removeData('crm_customers', id, setCustomers); showToast('ลบข้อมูลลูกค้าเรียบร้อย!'); };
+      const addCustomer = (data) => { writeData('crm_customers', data.id, { ...data, agent_id: currentUser.id }); showToast('บันทึกข้อมูลลูกค้าสำเร็จ!'); };
+      const updateCustomer = (data) => { writeData('crm_customers', data.id, data); showToast('อัปเดตข้อมูลลูกค้าเรียบร้อย!'); };
+      const deleteCustomer = (id) => { removeData('crm_customers', id); showToast('ลบข้อมูลลูกค้าเรียบร้อย!'); };
       
-      const addTask = (data) => { writeData('crm_tasks', data.id, { ...data, agent_id: currentUser.id }, setTasks); showToast('เพิ่มงานสำเร็จ!'); };
+      const addTask = (data) => { writeData('crm_tasks', data.id, { ...data, agent_id: currentUser.id }); showToast('เพิ่มงานสำเร็จ!'); };
       const toggleTask = (id) => {
           const t = tasks.find(x => x.id === id);
-          if(t) writeData('crm_tasks', t.id, { ...t, status: t.status === 'completed' ? 'pending' : 'completed' }, setTasks);
+          if(t) writeData('crm_tasks', t.id, { ...t, status: t.status === 'completed' ? 'pending' : 'completed' });
       };
-      const removeTask = (id) => removeData('crm_tasks', id, setTasks);
+      const removeTask = (id) => removeData('crm_tasks', id);
 
       // --- RENDER ---
       if (appState === 'loading') {
@@ -305,9 +292,9 @@
                 </h1>
               </div>
               <div className="flex items-center gap-4">
-                 <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${isCloud ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
-                    <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${isCloud ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
-                    <span className={`text-xs font-black uppercase tracking-widest ${isCloud ? 'text-emerald-700' : 'text-amber-700'}`}>{isCloud ? 'Cloud Sync' : 'Local Mode'}</span>
+                 <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border bg-emerald-50 border-emerald-100`}>
+                    <div className={`w-2.5 h-2.5 rounded-full animate-pulse bg-emerald-500`}></div>
+                    <span className={`text-xs font-black uppercase tracking-widest text-emerald-700`}>Cloud Sync</span>
                  </div>
               </div>
             </header>
@@ -433,7 +420,7 @@
       }, 0);
       const progress = Math.min(100, Math.round((monthRev / (user.targetRevenue || 1)) * 100));
 
-      // --- SMART ALERTS (5 Rules Restored) ---
+      // --- SMART ALERTS (5 Rules) ---
       const alerts = useMemo(() => {
         const arr = [];
         const today = new Date();
@@ -594,7 +581,7 @@
       );
     }
 
-    // --- ADD LEAD VIEW (FULL VERSION RESTORED) ---
+    // --- ADD LEAD VIEW ---
     function AddLeadView({ onAdd, setRoute }) {
       const [formData, setFormData] = useState({ 
         name: '', gender: 'Male', dob: '', phone: '', lineId: '', 
@@ -752,7 +739,7 @@
       );
     }
 
-    // --- MODAL (FULL VERSION RESTORED - POLICIES & AI INSIGHT) ---
+    // --- MODAL ---
     function CustomerModal({ customer, onClose, onSave, onDelete }) {
       const [formData, setFormData] = useState({ ...customer });
       const [isAddingPolicy, setIsAddingPolicy] = useState(false);
@@ -924,7 +911,7 @@
       );
     }
 
-    // --- ANALYTICS VIEW (FULL VERSION RESTORED) ---
+    // --- ANALYTICS VIEW ---
     function AnalyticsView({ customers }) {
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
@@ -959,6 +946,8 @@
         { title: 'Growth (YoM)', val: `${growth > 0 ? '+'+growth : growth}%`, color: growth >= 0 ? 'text-emerald-600' : 'text-red-600', bg: growth >= 0 ? 'bg-emerald-50' : 'bg-red-50', border: growth >= 0 ? 'border-emerald-100' : 'border-red-100' },
       ];
 
+      const chartData = STATUS_LIST.map(s => ({ name: s, count: customers.filter(c=>c.status===s).length }));
+
       return (
         <div className="space-y-10">
           <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="trend-up" className="text-pink-500" size={40}/> Analytics & KPI</h2><p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">วิเคราะห์ผลงาน สถิติรายได้ และการเติบโตของคุณ</p></div>
@@ -972,24 +961,15 @@
             ))}
           </div>
 
-          <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 h-[500px]">
-            <h3 className="font-black text-slate-800 mb-8 text-2xl">จำนวนลูกค้าในแต่ละขั้นตอน</h3>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={STATUS_LIST.map(s => ({ name: s, count: customers.filter(c=>c.status===s).length }))}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontWeight: '900'}} />
-                <RechartsTooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 'bold'}}/>
-                <Bar dataKey="count" fill="#3b82f6" radius={[16,16,0,0]}>
-                  {STATUS_LIST.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
+            <h3 className="font-black text-slate-800 mb-2 text-2xl">จำนวนลูกค้าในแต่ละขั้นตอน</h3>
+            <CSSBarChart data={chartData} />
           </div>
         </div>
       );
     }
 
-    // --- TEAM RANKING VIEW (RESTORED) ---
+    // --- TEAM RANKING VIEW ---
     function RankingView({ users, customers, currentUser }) {
       const ranking = users.filter(u => u.role === 'agent' && u.team === currentUser.team).map(u => {
         const rev = customers.filter(c => c.agent_id === u.id && c.status === 'ปิดการขาย').reduce((acc,c)=>acc+Number(c.premium||0),0);
