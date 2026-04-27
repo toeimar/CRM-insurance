@@ -1,9 +1,10 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nova CRM - Smart Insurance Dashboard</title>
+  <title>IA CRM - Smart Insurance Dashboard</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -11,12 +12,12 @@
   <!-- Phosphor Icons -->
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-  <!-- React & ReactDOM (เวอร์ชันที่เสถียรที่สุดสำหรับ HTML เดี่ยว) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- React & ReactDOM (ใช้ Cloudflare CDN เพื่อป้องกันปัญหาจอขาว/โหลดไม่ขึ้น) -->
+  <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 
   <!-- Babel Compiler -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.20/babel.min.js"></script>
 
   <!-- FIREBASE -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -49,7 +50,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef } = React;
 
     // --- CONFIG & CONSTANTS ---
     const ADMIN_EMAIL = "toei.mar168@gmail.com";
@@ -58,7 +59,8 @@
     
     // --- TELEGRAM CONFIG ---
     const TELEGRAM_BOT_TOKEN = "8772333460:AAG95AcJZFw8AJrpqJdh8LuPa2z2cDF0w2c";
-    const TELEGRAM_CHAT_ID = "-1005009335943";
+    // อัปเดต Chat ID ห้องรวม
+    const TELEGRAM_CHAT_ID = "-1003760920538";
 
     // --- UTILITIES ---
     const formatCurrency = (val) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 }).format(val || 0);
@@ -86,7 +88,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: targetChatId,
-          text: `🔔 <b>Nova CRM Alert</b>\n\n${message}`,
+          text: `🔔 <b>IA CRM Alert</b>\n\n${message}`,
           parse_mode: "HTML"
         })
       }).catch(err => console.error("Telegram Error:", err));
@@ -127,19 +129,49 @@
       const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(null), 3000); };
 
       useEffect(() => {
+        let isMounted = true;
+
         const initSystem = async () => {
           try {
-            if (!window.MY_FIREBASE_CONFIG) { console.error("No Firebase Config"); setAppState('ready'); return; }
+            if (!window.MY_FIREBASE_CONFIG) { 
+                console.error("No Firebase Config"); 
+                if(isMounted) setAppState('ready'); 
+                return; 
+            }
             if (!firebase.apps.length) firebase.initializeApp(window.MY_FIREBASE_CONFIG);
+            
             const firestoreDb = firebase.firestore();
             setDb(firestoreDb);
+            
             firebase.auth().onAuthStateChanged(user => {
-                if(!user) { firebase.auth().signInAnonymously().catch(err => { console.error("Auth Error", err); setAppState('ready'); }); } 
-                else setAppState('ready');
+                if(isMounted) {
+                    if(!user) { 
+                        firebase.auth().signInAnonymously().catch(err => { 
+                            console.error("Auth Error", err); 
+                            setAppState('ready'); 
+                        }); 
+                    } else {
+                        setAppState('ready');
+                    }
+                }
             });
-          } catch (err) { console.error("Init Error", err); setAppState('ready'); }
+          } catch (err) { 
+              console.error("Init Error", err); 
+              if(isMounted) setAppState('ready'); 
+          }
         };
+
+        // ระบบข้ามหน้าโหลดอัตโนมัติ (เผื่อ Firebase โดนบล็อก)
+        const fallbackTimer = setTimeout(() => {
+            if (isMounted) setAppState(prev => prev === 'loading' ? 'ready' : prev);
+        }, 3500);
+
         initSystem();
+
+        return () => { 
+            isMounted = false; 
+            clearTimeout(fallbackTimer); 
+        };
       }, []);
 
       useEffect(() => {
@@ -175,20 +207,36 @@
 
       const handleUpdateUser = async (updatedUser) => {
         await writeData('crm_users', updatedUser.id, updatedUser);
-        if(currentUser.id === updatedUser.id) setCurrentUser(updatedUser);
-        notifyTelegram(`⚙️ <b>อัปเดตข้อมูลผู้ใช้:</b>\nชื่อ: ${updatedUser.name}\nเป้ายอดขาย: ${formatCurrency(updatedUser.targetRevenue)}`);
+        if(currentUser && currentUser.id === updatedUser.id) setCurrentUser(updatedUser);
+        notifyTelegram(`⚙️ <b>อัปเดตข้อมูลผู้ใช้:</b>\nชื่อ: ${updatedUser.name}\nทีม: ${updatedUser.team}\nเป้ายอดขาย: ${formatCurrency(updatedUser.targetRevenue)}`);
       };
 
       const addCustomer = (data) => { 
         writeData('crm_customers', data.id, { ...data, agent_id: currentUser.id }); 
         showToast('บันทึกข้อมูลลูกค้าสำเร็จ!'); 
-        notifyTelegram(`🆕 <b>เพิ่ม Lead ใหม่:</b>\nชื่อ: ${data.name}\nเบอร์โทร: ${data.phone}\nโดย: ${currentUser.name}`);
+        
+        if(data.status === 'ปิดการขาย') {
+            notifyTelegram(`🎉 <b>ปิดการขายสำเร็จ! (Closed Deal)</b>\nยอดเยี่ยมมาก! ${currentUser.name} เพิ่มและปิดการขายลูกค้า: ${data.name}\nยอดเบี้ยรวม: ${formatCurrency(data.premium)}`, TELEGRAM_CHAT_ID);
+        } else {
+            notifyTelegram(`🆕 <b>เพิ่ม Lead ใหม่:</b>\nชื่อ: ${data.name}\nเบอร์โทร: ${data.phone}\nโดย: ${currentUser.name}`);
+        }
       };
 
-      const updateCustomer = (data) => { 
+      const updateCustomer = (data, newlyAddedPolicies = []) => { 
+        const oldData = customers.find(c => c.id === data.id);
         writeData('crm_customers', data.id, data); 
         showToast('อัปเดตข้อมูลลูกค้าเรียบร้อย!'); 
-        notifyTelegram(`🔄 <b>อัปเดตข้อมูลลูกค้า:</b>\nชื่อ: ${data.name}\nสถานะ: ${data.status}\nโดย: ${currentUser.name}`);
+        
+        // 1. แจ้งเตือนเมื่อสถานะเปลี่ยนเป็น "ปิดการขาย"
+        if (oldData && oldData.status !== 'ปิดการขาย' && data.status === 'ปิดการขาย') {
+            notifyTelegram(`🎉 <b>ปิดการขายสำเร็จ! (Closed Deal)</b>\nยอดเยี่ยมมาก! ${currentUser.name} เพิ่งปิดการขายลูกค้า: ${data.name}\nยอดเบี้ยรวม: ${formatCurrency(data.premium)}\nแผน: ${data.interestedPlan || '-'}`, TELEGRAM_CHAT_ID);
+        } 
+        // 2. แจ้งเตือนเมื่อมีการกด "เพิ่มกรมธรรม์" ใหม่ (นับยอดเบี้ยที่เก็บได้)
+        else if (newlyAddedPolicies && newlyAddedPolicies.length > 0) {
+            newlyAddedPolicies.forEach(p => {
+                notifyTelegram(`💰 <b>แจ้งเก็บเบี้ยรับใหม่!</b>\nตัวแทน: ${currentUser.name}\nลูกค้า: ${data.name}\nแผน: ${p.planName}\nเบี้ยที่เก็บได้: ${formatCurrency(p.premium)}`, TELEGRAM_CHAT_ID);
+            });
+        }
       };
 
       const deleteCustomer = (id) => { 
@@ -237,7 +285,7 @@
                 <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 p-2.5 rounded-2xl shadow-lg shadow-blue-500/30">
                   <Icon name="activity" className="text-white" size={24} />
                 </div>
-                <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">Nova CRM</span>
+                <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">IA CRM</span>
               </div>
               <button className="lg:hidden ml-auto text-slate-400 bg-slate-100 p-2 rounded-xl" onClick={() => setSidebarOpen(false)}><Icon name="x" size={20}/></button>
             </div>
@@ -302,7 +350,7 @@
             <div className="p-4 lg:p-10 max-w-[1600px] mx-auto space-y-10 pb-24 animate-in fade-in duration-500">
               {currentUser.role === 'admin' ? (
                  <>
-                   {currentRoute === 'home' && <AdminHomeView users={users} customers={customers} />}
+                   {currentRoute === 'home' && <AdminHomeView users={users} customers={customers} showToast={showToast} />}
                    {currentRoute === 'admin-customers' && <AdminCustomersView customers={customers} users={users} updateCustomer={updateCustomer} deleteCustomer={deleteCustomer} />}
                    {currentRoute === 'settings' && <SettingsView user={currentUser} handleUpdateUser={handleUpdateUser} showToast={showToast} />}
                  </>
@@ -350,11 +398,11 @@
         setErrorMsg('');
 
         if (isLogin) {
-          const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+          const user = users.find(u => (u.email || '').toLowerCase() === email.toLowerCase() && u.password === password);
           if (user) onSuccess(user);
           else setErrorMsg("รหัสผ่านหรืออีเมลไม่ถูกต้อง");
         } else {
-          if(users.find(u => u.email.toLowerCase() === email.toLowerCase())) return setErrorMsg("อีเมลนี้มีการลงทะเบียนแล้ว");
+          if(users.find(u => (u.email || '').toLowerCase() === email.toLowerCase())) return setErrorMsg("อีเมลนี้มีการลงทะเบียนแล้ว");
           const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'agent';
           const newUser = { id: Date.now().toString(), name, email, password, team: role === 'admin' ? 'HQ Management' : team, role, targetRevenue: 100000, telegramChatId: '' };
           onSuccess(newUser);
@@ -367,7 +415,7 @@
           <div className="bg-white rounded-[3rem] shadow-2xl p-8 sm:p-12 w-full max-w-lg relative z-10 animate-in zoom-in-95 duration-500">
             <div className="text-center mb-8">
               <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl transform rotate-3"><Icon name="activity" className="text-white" size={40} /></div>
-              <h2 className="text-4xl font-black text-slate-800 tracking-tight">Nova CRM</h2>
+              <h2 className="text-4xl font-black text-slate-800 tracking-tight">IA CRM</h2>
               <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-xs">Platform สำหรับนักขายมืออาชีพ</p>
             </div>
 
@@ -456,23 +504,38 @@
       }, [myCustomers]);
 
       // --- TELEGRAM DAILY DIGEST ---
+      const todaysTasks = useMemo(() => myTasks.filter(t => t.date === getTodayStr() && t.status !== 'completed'), [myTasks]);
+
       useEffect(() => {
-        if(alerts.length > 0) {
+        if(alerts.length > 0 || todaysTasks.length > 0) {
            const todayStr = getTodayStr(); 
            const storageKey = `telegram_notified_${user.id}_${todayStr}`;
            
            if(!localStorage.getItem(storageKey)) {
-              let msg = `📅 <b>สรุปแจ้งเตือนประจำวัน (Daily Alerts)</b>\nคุณ: ${user.name}\n\n`;
-              alerts.forEach(a => {
-                  msg += `• <b>${a.title}:</b> ${a.desc}\n`;
-              });
-              msg += `\n<i>เข้าสู่ระบบ Nova CRM เพื่อจัดการงานวันนี้</i>`;
+              let msg = `📅 <b>สรุปงานและแจ้งเตือนประจำวัน</b>\nคุณ: ${user.name}\n\n`;
+              
+              if (todaysTasks.length > 0) {
+                  msg += `📝 <b>สิ่งที่ต้องทำวันนี้ (Tasks):</b>\n`;
+                  todaysTasks.forEach(t => {
+                      msg += `• [ ] ${t.title}\n`;
+                  });
+                  msg += `\n`;
+              }
+
+              if (alerts.length > 0) {
+                  msg += `💡 <b>Smart Alerts:</b>\n`;
+                  alerts.forEach(a => {
+                      msg += `• <b>${a.title}:</b> ${a.desc}\n`;
+                  });
+              }
+
+              msg += `\n<i>เข้าสู่ระบบ IA CRM เพื่อจัดการงานวันนี้เลย!</i>`;
               
               notifyTelegram(msg, user.telegramChatId || TELEGRAM_CHAT_ID);
               localStorage.setItem(storageKey, 'true'); 
            }
         }
-      }, [alerts, user.id, user.name, user.telegramChatId]);
+      }, [alerts, todaysTasks, user.id, user.name, user.telegramChatId]);
 
       return (
         <div className="space-y-10">
@@ -613,7 +676,16 @@
 
       const handleSubmit = (e) => {
         e.preventDefault();
-        onAdd({...formData, id: Date.now().toString(), lastContact: getTodayStr(), ai_score: Math.floor(Math.random()*40)+50, premium: 0, policies: []});
+        const isClosed = formData.status === 'ปิดการขาย';
+        onAdd({
+            ...formData, 
+            id: Date.now().toString(), 
+            lastContact: getTodayStr(), 
+            ai_score: Math.floor(Math.random()*40)+50, 
+            premium: 0, 
+            policies: [],
+            closedDate: isClosed ? getTodayStr() : null 
+        });
         setRoute('customers');
       };
 
@@ -761,6 +833,7 @@
       const [isAiLoading, setIsAiLoading] = useState(false);
       const [aiInsight, setAiInsight] = useState(null);
       const [deleteConfirm, setDeleteConfirm] = useState(false);
+      const [newlyAddedPoliciesForAlert, setNewlyAddedPoliciesForAlert] = useState([]);
 
       const handleChange = (e) => {
         const { name, value } = e.target;
@@ -769,18 +842,29 @@
       };
 
       const handleSave = () => {
-        if(formData.status === 'ปิดการขาย' && customer.status !== 'ปิดการขาย') formData.closedDate = getTodayStr();
+        // หากเปลี่ยนสถานะเป็น ปิดการขาย ให้บันทึกวันที่ปัจจุบันลงไปใน closedDate อัตโนมัติ
+        if(formData.status === 'ปิดการขาย' && customer.status !== 'ปิดการขาย') {
+            formData.closedDate = getTodayStr();
+        }
         formData.lastContact = getTodayStr(); 
-        onSave(formData); onClose();
+        onSave(formData, newlyAddedPoliciesForAlert); 
+        onClose();
       };
 
       const handleAddPolicy = () => {
         if(!newPolicy.planName || !newPolicy.endDate) return alert("กรุณากรอกชื่อแผนและวันต่ออายุ");
+        const parsedPremium = Number(newPolicy.premium || 0);
+        
+        const policyToAdd = { ...newPolicy, premium: parsedPremium };
+
         setFormData(prev => ({ 
           ...prev, 
-          premium: Number(prev.premium || 0) + Number(newPolicy.premium || 0),
-          policies: [...(prev.policies || []), newPolicy] 
+          premium: Number(prev.premium || 0) + parsedPremium,
+          policies: [...(prev.policies || []), policyToAdd] 
         }));
+
+        setNewlyAddedPoliciesForAlert(prev => [...prev, policyToAdd]);
+
         setIsAddingPolicy(false);
         setNewPolicy({ planName: '', policyNo: '', cycle: 'Yearly', startDate: '', endDate: '', premium: '' });
       };
@@ -939,12 +1023,12 @@
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
       
-      const closedThisMonth = customers.filter(c => c.status === 'ปิดการขาย' && new Date(c.closedDate).getMonth() === currentMonth);
+      const closedThisMonth = customers.filter(c => c.status === 'ปิดการขาย' && c.closedDate && new Date(c.closedDate).getMonth() === currentMonth);
       const revThisMonth = closedThisMonth.reduce((acc, c) => acc + Number(c.premium||0), 0);
       const avgCase = closedThisMonth.length ? Math.round(revThisMonth / closedThisMonth.length) : 0;
       const convRate = customers.length ? Math.round((customers.filter(c=>c.status==='ปิดการขาย').length / customers.length)*100) : 0;
 
-      const closedThisYear = customers.filter(c => c.status === 'ปิดการขาย' && new Date(c.closedDate).getFullYear() === currentYear);
+      const closedThisYear = customers.filter(c => c.status === 'ปิดการขาย' && c.closedDate && new Date(c.closedDate).getFullYear() === currentYear);
       const revThisYear = closedThisYear.reduce((acc, c) => acc + Number(c.premium||0), 0);
 
       const monthlyData = new Array(12).fill(0);
@@ -1021,34 +1105,152 @@
       );
     }
 
+    // --- NEW: FUNCTIONAL AI ASSISTANT VIEW ---
     function AIAssistantView() {
+      const [inputText, setInputText] = useState('');
+      const [messages, setMessages] = useState([]);
+      const [isLoading, setIsLoading] = useState(false);
+      const messagesEndRef = useRef(null);
+
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      };
+
+      useEffect(() => {
+        scrollToBottom();
+      }, [messages, isLoading]);
+
+      const handleSend = async () => {
+        if (!inputText.trim() || isLoading) return;
+
+        const userMsg = inputText.trim();
+        setInputText('');
+        setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+        setIsLoading(true);
+
+        try {
+          const apiKey = ""; // API Key will be injected by the environment
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+          
+          const payload = {
+            contents: [{ parts: [{ text: userMsg }] }],
+            systemInstruction: {
+              parts: [{ text: "คุณคือ AI ผู้ช่วยสำหรับตัวแทนขายประกันภัยในระบบ IA CRM ให้คำแนะนำเกี่ยวกับการปิดการขาย สร้างสคริปต์การโทร ตอบข้อโต้แย้ง และวิเคราะห์ข้อมูลลูกค้า ตอบเป็นภาษาไทยด้วยความสุภาพ มืออาชีพ และกระชับเข้าใจง่าย ใช้ Markdown ในการจัดรูปแบบข้อความให้สวยงามได้" }]
+            }
+          };
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) throw new Error('API Error');
+          
+          const data = await res.json();
+          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'ขออภัย ไม่สามารถประมวลผลได้ในขณะนี้';
+          
+          setMessages(prev => [...prev, { role: 'model', text: reply }]);
+        } catch (error) {
+          console.error(error);
+          setMessages(prev => [...prev, { role: 'model', text: '❌ เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI หรือ API Key ไม่ถูกต้อง' }]);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      // ฟังก์ชันช่วยทำตัวหนาง่ายๆ จาก Markdown **text** เป็น <strong>text</strong>
+      const formatMessage = (text) => {
+          return { __html: text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') };
+      };
+
       return (
-        <div className="max-w-4xl mx-auto space-y-8">
-          <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 rounded-[3rem] p-12 lg:p-16 text-center shadow-2xl text-white relative overflow-hidden">
+        <div className="max-w-4xl mx-auto space-y-8 flex flex-col h-[calc(100vh-160px)]">
+          <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 rounded-[3rem] p-8 lg:p-12 shadow-2xl text-white relative overflow-hidden flex flex-col flex-1 min-h-0 border border-indigo-500/20">
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
-            <Icon name="brain" size={80} className="mx-auto mb-8 text-indigo-300 animate-pulse" />
-            <h2 className="text-4xl lg:text-5xl font-black mb-4 relative z-10">Gemini AI Assistant</h2>
-            <p className="text-indigo-200 font-bold text-lg max-w-xl mx-auto relative z-10 leading-relaxed">มีอะไรให้ช่วยไหม? ให้ AI วิเคราะห์แนวทางปิดการขาย สร้างสคริปต์ หรือเลือกแผนให้ตรงใจลูกค้าได้เลย!</p>
-            <div className="mt-12 bg-white/10 p-4 rounded-3xl flex flex-col md:flex-row gap-4 backdrop-blur-xl border border-white/20 relative z-10 shadow-inner">
-              <input type="text" placeholder="พิมพ์ข้อความที่นี่..." className="flex-1 bg-transparent border-none text-white outline-none placeholder-indigo-300 font-bold px-4 py-2" />
-              <button className="bg-indigo-500 px-8 py-4 rounded-2xl font-black hover:bg-indigo-400 shadow-lg transition text-lg">ส่งให้ AIคิด</button>
-            </div>
+            
+            {messages.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center relative z-10 animate-in fade-in zoom-in duration-500">
+                    <Icon name="brain" size={80} className="mx-auto mb-8 text-indigo-300 animate-pulse drop-shadow-[0_0_15px_rgba(165,180,252,0.5)]" />
+                    <h2 className="text-4xl lg:text-5xl font-black mb-4 tracking-tight">IA AI Assistant</h2>
+                    <p className="text-indigo-200 font-bold text-lg max-w-xl mx-auto leading-relaxed">พิมพ์ปรึกษา AI ผู้ช่วยได้เลย! <br/>เช่น "ขอสคริปต์โทรหาลูกค้าเก่า", "วิธีตอบข้อโต้แย้งเรื่องเบี้ยแพง", หรือ "ช่วยคิดแผนประกันสำหรับคนอายุ 30"</p>
+                </div>
+            ) : (
+                <div className="flex-1 overflow-y-auto mb-6 pr-2 space-y-6 custom-scrollbar relative z-10">
+                    {messages.map((msg, idx) => (
+                        <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
+                            <div className={`max-w-[85%] p-5 rounded-3xl ${msg.role === 'user' ? 'bg-indigo-500 text-white rounded-br-sm shadow-md' : 'bg-white/10 text-indigo-50 rounded-bl-sm border border-white/10 backdrop-blur-md shadow-inner'}`}>
+                                {msg.role === 'model' && <Icon name="sparkle" className="text-indigo-300 mb-2" size={20}/>}
+                                <p className="whitespace-pre-wrap font-medium leading-relaxed" dangerouslySetInnerHTML={formatMessage(msg.text)}></p>
+                            </div>
+                        </div>
+                    ))}
+                    {isLoading && (
+                        <div className="flex flex-col items-start">
+                            <div className="max-w-[85%] p-4 rounded-3xl bg-white/10 text-indigo-50 rounded-bl-sm border border-white/10 backdrop-blur-md flex items-center gap-3">
+                                <Icon name="circle-notch" className="animate-spin text-indigo-300" size={20} />
+                                <span className="font-bold text-indigo-200">AI กำลังวิเคราะห์ข้อมูล...</span>
+                            </div>
+                        </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+            )}
+
+            <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="mt-auto bg-white/10 p-3 rounded-3xl flex flex-col md:flex-row gap-3 backdrop-blur-xl border border-white/20 relative z-10 shadow-inner shrink-0">
+              <input type="text" value={inputText} onChange={e => setInputText(e.target.value)} disabled={isLoading} placeholder="พิมพ์ข้อความปรึกษา AI ที่นี่..." className="flex-1 bg-transparent border-none text-white outline-none placeholder-indigo-300/70 font-bold px-5 py-3" />
+              <button type="submit" disabled={isLoading || !inputText.trim()} className="bg-indigo-500 px-8 py-3 rounded-2xl font-black hover:bg-indigo-400 shadow-lg transition text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                ส่ง <Icon name="paper-plane-right" weight="fill" />
+              </button>
+            </form>
           </div>
         </div>
       );
     }
 
-    function AdminHomeView({ users, customers }) {
+    // --- ADMIN HOME VIEW ---
+    function AdminHomeView({ users, customers, showToast }) {
       const agents = users.filter(u => u.role === 'agent');
       const closedCases = customers.filter(c => c.status === 'ปิดการขาย');
       const totalRev = closedCases.reduce((acc, c) => acc + Number(c.premium||0), 0);
+
+      const testGroupTelegram = async () => {
+        try {
+            const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: TELEGRAM_CHAT_ID,
+                    text: `📢 <b>ทดสอบระบบแจ้งเตือนห้องรวม</b>\nผู้ดูแลระบบกำลังทดสอบระบบแจ้งเตือน IA CRM ฝั่ง Admin\nสถานะการเชื่อมต่อ: <b>สำเร็จ! ✅</b>`,
+                    parse_mode: "HTML"
+                })
+            });
+            const data = await res.json();
+            if(data.ok) {
+                showToast('ส่งแจ้งเตือนห้องรวมสำเร็จ!');
+            } else {
+                alert(`ส่งไม่สำเร็จ: ${data.description}`);
+            }
+        } catch(e) {
+            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Telegram API');
+        }
+      };
 
       return (
         <div className="space-y-10">
           <div className="bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 rounded-[3rem] p-12 text-white shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
-            <h2 className="text-5xl font-black mb-3 relative z-10">Admin Dashboard</h2>
-            <p className="text-purple-200 font-bold uppercase tracking-widest text-sm relative z-10">หน้าต่างสรุปผลสำหรับผู้บริหาร</p>
+            
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10 gap-4 mb-3">
+                <div>
+                    <h2 className="text-5xl font-black">Admin Dashboard</h2>
+                    <p className="text-purple-200 font-bold uppercase tracking-widest text-sm mt-2">หน้าต่างสรุปผลสำหรับผู้บริหาร</p>
+                </div>
+                <button onClick={testGroupTelegram} className="bg-white/20 hover:bg-white/30 backdrop-blur-md px-6 py-3 rounded-xl font-black text-sm transition flex items-center gap-2 border border-white/30 shadow-lg">
+                    <Icon name="telegram-logo" size={20} /> ทดสอบแจ้งเตือนห้องรวม
+                </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12 relative z-10">
               <div className="bg-white/10 p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ยอดขายรวมบริษัท</p><h3 className="text-5xl font-black text-amber-400">{formatCurrency(totalRev)}</h3></div>
               <div className="bg-white/10 p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ตัวแทนทั้งหมด</p><h3 className="text-5xl font-black text-blue-300">{agents.length} <span className="text-2xl font-bold">คน</span></h3></div>
@@ -1132,11 +1334,13 @@
     function SettingsView({ user, handleUpdateUser, showToast }) {
       const [formData, setFormData] = useState({ 
         name: user.name, 
+        email: user.email || '',
+        password: user.password || '',
+        team: user.team || '',
         targetRevenue: user.targetRevenue || 100000,
         telegramChatId: user.telegramChatId || '' 
       });
 
-      // ฟังก์ชันทดสอบแจ้งเตือน
       const testTelegramNotification = async () => {
         const testChatId = formData.telegramChatId || TELEGRAM_CHAT_ID;
         try {
@@ -1145,7 +1349,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     chat_id: testChatId,
-                    text: `✅ <b>ทดสอบระบบแจ้งเตือน</b>\nNova CRM สามารถส่งข้อความหาคุณได้สำเร็จแล้วครับ!`,
+                    text: `✅ <b>ทดสอบระบบแจ้งเตือน</b>\nIA CRM สามารถส่งข้อความหาคุณได้สำเร็จแล้วครับ!`,
                     parse_mode: "HTML"
                 })
             });
@@ -1165,8 +1369,17 @@
           <Icon name="gear" size={64} className="mx-auto text-slate-300 mb-6"/>
           <h2 className="text-3xl font-black mb-8">ตั้งค่าโปรไฟล์</h2>
           <div className="space-y-6 text-left">
-            <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อ - นามสกุล</label><input type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
             
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label className="text-xs font-black block mb-2 text-slate-400">อีเมล (ใช้เข้าระบบ)</label><input type="email" value={formData.email} onChange={e=>setFormData({...formData, email: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+                <div><label className="text-xs font-black block mb-2 text-slate-400">รหัสผ่าน</label><input type="text" value={formData.password} onChange={e=>setFormData({...formData, password: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อ - นามสกุล</label><input type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+                <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อทีม</label><input type="text" value={formData.team} onChange={e=>setFormData({...formData, team: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+            </div>
+
             {user.role === 'agent' && (
               <div><label className="text-xs font-black block mb-2 text-slate-400">เป้ายอดขายต่อเดือน</label><input type="number" value={formData.targetRevenue} onChange={e=>setFormData({...formData, targetRevenue: Number(e.target.value)})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
             )}
@@ -1177,7 +1390,7 @@
                 <input type="text" placeholder="เช่น 123456789" value={formData.telegramChatId} onChange={e=>setFormData({...formData, telegramChatId: e.target.value})} className="flex-1 border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/>
                 <button type="button" onClick={testTelegramNotification} className="bg-blue-100 text-blue-600 px-6 rounded-xl font-black hover:bg-blue-200 transition">ทดสอบส่ง</button>
               </div>
-              <p className="text-[10px] font-bold text-slate-400 mt-2">หากต้องการรับแจ้งเตือนส่วนตัว ให้พิมพ์ค้นหา @userinfobot ใน Telegram เพื่อดู ID ของคุณ และอย่าลืมกด /start ทักหาบอท Nova CRM ด้วย</p>
+              <p className="text-[10px] font-bold text-slate-400 mt-2">หากต้องการรับแจ้งเตือนส่วนตัว ให้พิมพ์ค้นหา @userinfobot ใน Telegram เพื่อดู ID ของคุณ และอย่าลืมกด /start ทักหาบอท IA CRM ด้วย</p>
             </div>
 
             <button onClick={() => { handleUpdateUser({...user, ...formData}); showToast('บันทึกการตั้งค่าโปรไฟล์เรียบร้อย!'); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-lg hover:bg-slate-800 transition mt-4">บันทึกการเปลี่ยนแปลง</button>
