@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -828,7 +829,7 @@
     function CustomerModal({ customer, onClose, onSave, onDelete }) {
       const [formData, setFormData] = useState({ ...customer });
       const [isAddingPolicy, setIsAddingPolicy] = useState(false);
-      const [newPolicy, setNewPolicy] = useState({ planName: '', policyNo: '', cycle: 'Yearly', startDate: '', endDate: '', premium: '' });
+      const [newPolicy, setNewPolicy] = useState({ planName: '', policyNo: '', cycle: 'รายปี', startDate: '', endDate: '', premium: '' });
       const [isAiLoading, setIsAiLoading] = useState(false);
       const [aiInsight, setAiInsight] = useState(null);
       const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -841,7 +842,6 @@
       };
 
       const handleSave = () => {
-        // หากเปลี่ยนสถานะเป็น ปิดการขาย ให้บันทึกวันที่ปัจจุบันลงไปใน closedDate อัตโนมัติ
         if(formData.status === 'ปิดการขาย' && customer.status !== 'ปิดการขาย') {
             formData.closedDate = getTodayStr();
         }
@@ -865,7 +865,7 @@
         setNewlyAddedPoliciesForAlert(prev => [...prev, policyToAdd]);
 
         setIsAddingPolicy(false);
-        setNewPolicy({ planName: '', policyNo: '', cycle: 'Yearly', startDate: '', endDate: '', premium: '' });
+        setNewPolicy({ planName: '', policyNo: '', cycle: 'รายปี', startDate: '', endDate: '', premium: '' });
       };
 
       const generateAiInsight = () => {
@@ -929,7 +929,15 @@
                         <div className="bg-white p-6 rounded-3xl border-2 border-emerald-200 mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shadow-md animate-in fade-in">
                           <div className="md:col-span-2"><label className="text-[10px] font-black text-slate-400 mb-1 block">ชื่อแผน</label><input type="text" value={newPolicy.planName} onChange={(e)=>setNewPolicy({...newPolicy, planName: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black" /></div>
                           <div><label className="text-[10px] font-black text-slate-400 mb-1 block">เลขกรมธรรม์</label><input type="text" value={newPolicy.policyNo} onChange={(e)=>setNewPolicy({...newPolicy, policyNo: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black" /></div>
-                          <div><label className="text-[10px] font-black text-slate-400 mb-1 block">รอบชำระ</label><select value={newPolicy.cycle} onChange={(e)=>setNewPolicy({...newPolicy, cycle: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"><option>รายเดือน</option><option>รายปี</option></select></div>
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 mb-1 block">รอบชำระ</label>
+                            <select value={newPolicy.cycle} onChange={(e)=>setNewPolicy({...newPolicy, cycle: e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black">
+                                <option value="รายเดือน">รายเดือน</option>
+                                <option value="ราย 3 เดือน">ราย 3 เดือน</option>
+                                <option value="ราย 6 เดือน">ราย 6 เดือน</option>
+                                <option value="รายปี">รายปี</option>
+                            </select>
+                          </div>
                           <div className="lg:col-span-2"><label className="text-[10px] font-black text-red-400 mb-1 block">วันต่ออายุ *</label><input type="date" value={newPolicy.endDate} onChange={(e)=>setNewPolicy({...newPolicy, endDate: e.target.value})} className="w-full border-2 border-orange-200 bg-orange-50 rounded-xl px-4 py-2 font-black text-orange-800" /></div>
                           <div className="lg:col-span-2"><label className="text-[10px] font-black text-emerald-600 mb-1 block">ค่าเบี้ย</label><input type="number" value={newPolicy.premium} onChange={(e)=>setNewPolicy({...newPolicy, premium: e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black text-emerald-800" /></div>
                           <button onClick={handleAddPolicy} className="md:col-span-2 lg:col-span-4 py-3 bg-emerald-500 text-white rounded-xl font-black mt-2">บันทึกข้อมูลกรมธรรม์</button>
@@ -1104,7 +1112,7 @@
       );
     }
 
-    // --- NEW: FUNCTIONAL AI ASSISTANT VIEW ---
+    // --- FUNCTIONAL AI ASSISTANT VIEW ---
     function AIAssistantView() {
       const [inputText, setInputText] = useState('');
       const [messages, setMessages] = useState([]);
@@ -1128,8 +1136,8 @@
         setIsLoading(true);
 
         try {
-          const apiKey = ""; // API Key will be injected by the environment
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+          const apiKey = "AIzaSyDbHog1AJB9nmrPvQtBefDIeF-uy_y4XjU"; // API Key ที่ระบุ
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
           
           const payload = {
             contents: [{ parts: [{ text: userMsg }] }],
@@ -1144,21 +1152,23 @@
             body: JSON.stringify(payload)
           });
 
-          if (!res.ok) throw new Error('API Error');
-          
           const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data.error?.message || 'API Error');
+          }
+          
           const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'ขออภัย ไม่สามารถประมวลผลได้ในขณะนี้';
           
           setMessages(prev => [...prev, { role: 'model', text: reply }]);
         } catch (error) {
-          console.error(error);
-          setMessages(prev => [...prev, { role: 'model', text: '❌ เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI หรือ API Key ไม่ถูกต้อง' }]);
+          console.error("AI Error:", error);
+          setMessages(prev => [...prev, { role: 'model', text: 'ขออภัย ระบบ AI ไม่สามารถตอบกลับได้ในขณะนี้ โปรดลองใหม่อีกครั้งในภายหลังครับ' }]);
         } finally {
           setIsLoading(false);
         }
       };
 
-      // ฟังก์ชันช่วยทำตัวหนาง่ายๆ จาก Markdown **text** เป็น <strong>text</strong>
       const formatMessage = (text) => {
           return { __html: text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') };
       };
@@ -1398,7 +1408,6 @@
       );
     }
 
-    // Mount App
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<NovaCRMApp />);
   </script>
