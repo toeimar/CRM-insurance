@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -1082,7 +1083,6 @@
       const [search, setSearch] = useState('');
       const [selectedCustomer, setSelectedCustomer] = useState(null); 
 
-      // เพิ่ม fallback (c.name || '') ป้องกันข้อมูลเก่าตกหล่นแล้วค้นหา Error
       const filtered = customers.filter(c => (c.name || '').toLowerCase().includes(search.toLowerCase()) || (c.phone || '').includes(search));
 
       return (
@@ -1137,6 +1137,30 @@
         telegramChatId: user.telegramChatId || '' 
       });
 
+      // ฟังก์ชันทดสอบแจ้งเตือน
+      const testTelegramNotification = async () => {
+        const testChatId = formData.telegramChatId || TELEGRAM_CHAT_ID;
+        try {
+            const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: testChatId,
+                    text: `✅ <b>ทดสอบระบบแจ้งเตือน</b>\nNova CRM สามารถส่งข้อความหาคุณได้สำเร็จแล้วครับ!`,
+                    parse_mode: "HTML"
+                })
+            });
+            const data = await res.json();
+            if(data.ok) {
+                showToast('ส่งข้อความทดสอบสำเร็จ! เช็คใน Telegram ได้เลย');
+            } else {
+                alert(`ส่งไม่สำเร็จ!\n\nสาเหตุ: ${data.description}\n\nวิธีแก้: คุณต้องไปค้นหาบอทใน Telegram และกดปุ่ม /start เพื่อทักหาบอทก่อน 1 ครั้งครับ`);
+            }
+        } catch(e) {
+            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Telegram API');
+        }
+      };
+
       return (
         <div className="max-w-2xl mx-auto p-12 bg-white rounded-[3rem] shadow-sm border border-slate-100 text-center">
           <Icon name="gear" size={64} className="mx-auto text-slate-300 mb-6"/>
@@ -1150,11 +1174,14 @@
 
             <div>
               <label className="text-xs font-black block mb-2 text-slate-400">Telegram Chat ID (สำหรับรับแจ้งเตือน Smart Alerts ส่วนตัว)</label>
-              <input type="text" placeholder="เช่น 123456789" value={formData.telegramChatId} onChange={e=>setFormData({...formData, telegramChatId: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/>
-              <p className="text-[10px] font-bold text-slate-400 mt-2">หากต้องการรับแจ้งเตือนนัดหมาย/วันเกิดเฉพาะงานของคุณ สามารถค้นหา Chat ID ได้จาก @userinfobot ใน Telegram</p>
+              <div className="flex gap-2">
+                <input type="text" placeholder="เช่น 123456789" value={formData.telegramChatId} onChange={e=>setFormData({...formData, telegramChatId: e.target.value})} className="flex-1 border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/>
+                <button type="button" onClick={testTelegramNotification} className="bg-blue-100 text-blue-600 px-6 rounded-xl font-black hover:bg-blue-200 transition">ทดสอบส่ง</button>
+              </div>
+              <p className="text-[10px] font-bold text-slate-400 mt-2">หากต้องการรับแจ้งเตือนส่วนตัว ให้พิมพ์ค้นหา @userinfobot ใน Telegram เพื่อดู ID ของคุณ และอย่าลืมกด /start ทักหาบอท Nova CRM ด้วย</p>
             </div>
 
-            <button onClick={() => { handleUpdateUser({...user, ...formData}); showToast('บันทึกการตั้งค่าโปรไฟล์เรียบร้อย!'); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-lg hover:bg-slate-800 transition">บันทึกการเปลี่ยนแปลง</button>
+            <button onClick={() => { handleUpdateUser({...user, ...formData}); showToast('บันทึกการตั้งค่าโปรไฟล์เรียบร้อย!'); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-lg hover:bg-slate-800 transition mt-4">บันทึกการเปลี่ยนแปลง</button>
           </div>
         </div>
       );
