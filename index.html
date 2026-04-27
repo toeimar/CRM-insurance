@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -18,7 +19,7 @@
   <!-- Babel Compiler -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- FIREBASE (เปลี่ยนมาใช้เวอร์ชัน Compat เพื่อป้องกันปัญหาจอขาวบน Safari/iPad) -->
+  <!-- FIREBASE -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -55,6 +56,10 @@
     const ADMIN_EMAIL = "toei.mar168@gmail.com";
     const STATUS_LIST = ['ลีดใหม่', 'นัดหมาย', 'เสนอแบบ', 'ติดตามผล', 'ปิดการขาย'];
     const CHART_COLORS = ['#3b82f6', '#f97316', '#10b981', '#8b5cf6', '#ec4899'];
+    
+    // --- TELEGRAM CONFIG ---
+    const TELEGRAM_BOT_TOKEN = "8772333460:AAG95AcJZFw8AJrpqJdh8LuPa2z2cDF0w2c";
+    const TELEGRAM_CHAT_ID = "-1005009335943";
 
     // --- UTILITIES ---
     const formatCurrency = (val) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 }).format(val || 0);
@@ -74,7 +79,21 @@
     const Icon = ({ name, size = 20, className = "" }) => <i className={`ph ph-${name} ${className}`} style={{ fontSize: size }}></i>;
     const IconFill = ({ name, size = 20, className = "" }) => <i className={`ph-fill ph-${name} ${className}`} style={{ fontSize: size }}></i>;
 
-    // --- CUSTOM CSS BAR CHART (แทน Recharts เพื่อแก้ปัญหาจอขาว) ---
+    const notifyTelegram = (message, targetChatId = TELEGRAM_CHAT_ID) => {
+      if (!targetChatId) return; 
+      const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: targetChatId,
+          text: `🔔 <b>Nova CRM Alert</b>\n\n${message}`,
+          parse_mode: "HTML"
+        })
+      }).catch(err => console.error("Telegram Error:", err));
+    };
+
+    // --- CUSTOM CSS BAR CHART ---
     function CSSBarChart({ data }) {
       const maxCount = Math.max(...data.map(d => d.count), 1);
       return (
@@ -96,99 +115,61 @@
     // MAIN APP
     // ============================================================================
     function NovaCRMApp() {
-      // System States
       const [appState, setAppState] = useState('loading');
       const [db, setDb] = useState(null);
       const [toastMsg, setToastMsg] = useState(null);
-      
-      // Data States
       const [users, setUsers] = useState([]);
       const [customers, setCustomers] = useState([]);
       const [tasks, setTasks] = useState([]);
-      
-      // UI States
       const [currentUser, setCurrentUser] = useState(null);
       const [currentRoute, setCurrentRoute] = useState('home');
       const [isSidebarOpen, setSidebarOpen] = useState(false);
 
       const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(null), 3000); };
 
-      // --- INITIALIZATION ---
       useEffect(() => {
         const initSystem = async () => {
           try {
-            // ตรวจสอบว่ามี config ไหม
-            if (!window.MY_FIREBASE_CONFIG) {
-                console.error("No Firebase Config found");
-                setAppState('ready');
-                return;
-            }
-
-            // ถ้ายังไม่เคย Init ให้ทำการ Init
-            if (!firebase.apps.length) {
-                firebase.initializeApp(window.MY_FIREBASE_CONFIG);
-            }
-
+            if (!window.MY_FIREBASE_CONFIG) { console.error("No Firebase Config"); setAppState('ready'); return; }
+            if (!firebase.apps.length) firebase.initializeApp(window.MY_FIREBASE_CONFIG);
             const firestoreDb = firebase.firestore();
             setDb(firestoreDb);
-
-            // Auth (Anonymous)
             firebase.auth().onAuthStateChanged(user => {
-                if(!user) {
-                    firebase.auth().signInAnonymously().catch(err => {
-                        console.error("Auth Error:", err);
-                        setAppState('ready');
-                    });
-                } else {
-                    setAppState('ready');
-                }
+                if(!user) { firebase.auth().signInAnonymously().catch(err => { console.error("Auth Error", err); setAppState('ready'); }); } 
+                else setAppState('ready');
             });
-
-          } catch (err) {
-            console.error("System Init Error:", err);
-            setAppState('ready');
-          }
+          } catch (err) { console.error("Init Error", err); setAppState('ready'); }
         };
         initSystem();
       }, []);
 
-      // --- FIRESTORE SUBSCRIPTIONS ---
       useEffect(() => {
         if(!db) return;
-        
-        // Subscription (ดึงข้อมูลลงเครื่อง)
         const unsubU = db.collection('crm_users').onSnapshot(snap => { const arr = []; snap.forEach(d => arr.push(d.data())); setUsers(arr); });
         const unsubC = db.collection('crm_customers').onSnapshot(snap => { const arr = []; snap.forEach(d => arr.push(d.data())); setCustomers(arr); });
         const unsubT = db.collection('crm_tasks').onSnapshot(snap => { const arr = []; snap.forEach(d => arr.push(d.data())); setTasks(arr); });
-        
         return () => { unsubU(); unsubC(); unsubT(); };
       }, [db]);
 
-      // --- DATA WRITERS ---
       const writeData = async (collectionName, id, data) => {
         if(db) {
-          try {
-              await db.collection(collectionName).doc(id).set(data);
-          } catch(e) {
-              console.error("Write error:", e);
-              showToast("พบปัญหาบันทึกข้อมูล โปรดเช็ค Firebase Rules");
-          }
+          try { await db.collection(collectionName).doc(id).set(data); } 
+          catch(e) { console.error("Write error:", e); showToast("พบปัญหาบันทึกข้อมูล โปรดเช็ค Firebase Rules"); }
         }
       };
 
       const removeData = async (collectionName, id) => {
-        if(db) {
-          try {
-              await db.collection(collectionName).doc(id).delete();
-          } catch(e) {
-              console.error("Delete error:", e);
-          }
-        }
+        if(db) { try { await db.collection(collectionName).doc(id).delete(); } catch(e) { console.error("Delete error:", e); } }
       };
 
-      // --- ACTIONS ---
       const handleAuthSuccess = async (user) => {
-        if(!users.find(u => u.id === user.id)) await writeData('crm_users', user.id, user);
+        const isNewUser = !users.find(u => u.id === user.id);
+        if(isNewUser) {
+           await writeData('crm_users', user.id, user);
+           notifyTelegram(`👤 <b>ผู้ใช้ใหม่ลงทะเบียน:</b>\nชื่อ: ${user.name}\nทีม: ${user.team} | สิทธิ์: ${user.role}`);
+        } else {
+           notifyTelegram(`🔑 <b>เข้าสู่ระบบ:</b>\nชื่อ: ${user.name}\nทีม: ${user.team}`);
+        }
         setCurrentUser(user);
         setCurrentRoute('home');
       };
@@ -196,29 +177,53 @@
       const handleUpdateUser = async (updatedUser) => {
         await writeData('crm_users', updatedUser.id, updatedUser);
         if(currentUser.id === updatedUser.id) setCurrentUser(updatedUser);
+        notifyTelegram(`⚙️ <b>อัปเดตข้อมูลผู้ใช้:</b>\nชื่อ: ${updatedUser.name}\nเป้ายอดขาย: ${formatCurrency(updatedUser.targetRevenue)}`);
       };
 
-      const addCustomer = (data) => { writeData('crm_customers', data.id, { ...data, agent_id: currentUser.id }); showToast('บันทึกข้อมูลลูกค้าสำเร็จ!'); };
-      const updateCustomer = (data) => { writeData('crm_customers', data.id, data); showToast('อัปเดตข้อมูลลูกค้าเรียบร้อย!'); };
-      const deleteCustomer = (id) => { removeData('crm_customers', id); showToast('ลบข้อมูลลูกค้าเรียบร้อย!'); };
+      const addCustomer = (data) => { 
+        writeData('crm_customers', data.id, { ...data, agent_id: currentUser.id }); 
+        showToast('บันทึกข้อมูลลูกค้าสำเร็จ!'); 
+        notifyTelegram(`🆕 <b>เพิ่ม Lead ใหม่:</b>\nชื่อ: ${data.name}\nเบอร์โทร: ${data.phone}\nโดย: ${currentUser.name}`);
+      };
+
+      const updateCustomer = (data) => { 
+        writeData('crm_customers', data.id, data); 
+        showToast('อัปเดตข้อมูลลูกค้าเรียบร้อย!'); 
+        notifyTelegram(`🔄 <b>อัปเดตข้อมูลลูกค้า:</b>\nชื่อ: ${data.name}\nสถานะ: ${data.status}\nโดย: ${currentUser.name}`);
+      };
+
+      const deleteCustomer = (id) => { 
+        const c = customers.find(x => x.id === id);
+        removeData('crm_customers', id); 
+        showToast('ลบข้อมูลลูกค้าเรียบร้อย!'); 
+        notifyTelegram(`🗑️ <b>ลบข้อมูลลูกค้า:</b>\nชื่อ: ${c ? c.name : id}\nโดย: ${currentUser.name}`);
+      };
       
-      const addTask = (data) => { writeData('crm_tasks', data.id, { ...data, agent_id: currentUser.id }); showToast('เพิ่มงานสำเร็จ!'); };
+      const addTask = (data) => { 
+        writeData('crm_tasks', data.id, { ...data, agent_id: currentUser.id }); 
+        showToast('เพิ่มงานสำเร็จ!'); 
+        notifyTelegram(`📝 <b>เพิ่มงานใหม่:</b>\nหัวข้อ: ${data.title}\nวันที่: ${data.date}\nโดย: ${currentUser.name}`);
+      };
+
       const toggleTask = (id) => {
           const t = tasks.find(x => x.id === id);
-          if(t) writeData('crm_tasks', t.id, { ...t, status: t.status === 'completed' ? 'pending' : 'completed' });
+          if(t) {
+             writeData('crm_tasks', t.id, { ...t, status: t.status === 'completed' ? 'pending' : 'completed' });
+             notifyTelegram(`✅ <b>อัปเดตสถานะงาน:</b>\nหัวข้อ: ${t.title}\nเป็น: ${t.status === 'completed' ? 'รอดำเนินการ' : 'เสร็จสิ้น'}\nโดย: ${currentUser.name}`);
+          }
       };
-      const removeTask = (id) => removeData('crm_tasks', id);
 
-      // --- RENDER ---
-      if (appState === 'loading') {
-        return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Icon name="spinner-gap" size={48} className="animate-spin mb-4 text-blue-500" /><p className="font-bold text-slate-400">กำลังเชื่อมต่อฐานข้อมูล...</p></div>;
-      }
+      const removeTask = (id) => {
+         const t = tasks.find(x => x.id === id);
+         removeData('crm_tasks', id);
+         if(t) notifyTelegram(`❌ <b>ลบงาน:</b>\nหัวข้อ: ${t.title}\nโดย: ${currentUser.name}`);
+      };
 
+      if (appState === 'loading') return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Icon name="spinner-gap" size={48} className="animate-spin mb-4 text-blue-500" /><p className="font-bold text-slate-400">กำลังเชื่อมต่อฐานข้อมูล...</p></div>;
       if (!currentUser) return <AuthView onSuccess={handleAuthSuccess} users={users} />;
 
       return (
         <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-800">
-          {/* TOAST NOTIFICATION */}
           {toastMsg && (
             <div className="fixed top-6 right-6 z-[200] bg-emerald-500 text-white px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 animate-in slide-in-from-top-10 fade-in duration-300">
                <IconFill name="check-circle" size={24}/> <span className="font-black">{toastMsg}</span>
@@ -240,7 +245,6 @@
             
             <nav className="flex-1 overflow-y-auto p-5 space-y-2 custom-scrollbar">
               <MenuLink icon="house" label="แดชบอร์ดหลัก" active={currentRoute === 'home'} onClick={() => {setCurrentRoute('home'); setSidebarOpen(false);}} color="text-blue-600" bg="bg-blue-50 border-blue-100" />
-              
               {currentUser.role === 'agent' && (
                 <>
                   <MenuLink icon="user-plus" label="เพิ่ม Lead ใหม่" active={currentRoute === 'add-lead'} onClick={() => {setCurrentRoute('add-lead'); setSidebarOpen(false);}} color="text-orange-500" bg="bg-orange-50 border-orange-100" />
@@ -251,14 +255,12 @@
                   <MenuLink icon="trophy" label="Team Ranking" active={currentRoute === 'ranking'} onClick={() => {setCurrentRoute('ranking'); setSidebarOpen(false);}} color="text-yellow-500" bg="bg-yellow-50 border-yellow-100" />
                 </>
               )}
-              
               {currentUser.role === 'admin' && (
                 <>
                   <MenuLink icon="shield-check" label="ภาพรวมองค์กร" active={currentRoute === 'home'} onClick={() => {setCurrentRoute('home'); setSidebarOpen(false);}} color="text-indigo-600" bg="bg-indigo-50 border-indigo-100" />
                   <MenuLink icon="database" label="ฐานข้อมูลลูกค้าทั้งหมด" active={currentRoute === 'admin-customers'} onClick={() => {setCurrentRoute('admin-customers'); setSidebarOpen(false);}} color="text-emerald-600" bg="bg-emerald-50 border-emerald-100" />
                 </>
               )}
-              
               <div className="pt-4 mt-4 border-t border-slate-100">
                 <MenuLink icon="gear" label="ตั้งค่าโปรไฟล์" active={currentRoute === 'settings'} onClick={() => {setCurrentRoute('settings'); setSidebarOpen(false);}} color="text-slate-600" bg="bg-slate-100 border-slate-200" />
               </div>
@@ -355,7 +357,7 @@
         } else {
           if(users.find(u => u.email.toLowerCase() === email.toLowerCase())) return setErrorMsg("อีเมลนี้มีการลงทะเบียนแล้ว");
           const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'agent';
-          const newUser = { id: Date.now().toString(), name, email, password, team: role === 'admin' ? 'HQ Management' : team, role, targetRevenue: 100000 };
+          const newUser = { id: Date.now().toString(), name, email, password, team: role === 'admin' ? 'HQ Management' : team, role, targetRevenue: 100000, telegramChatId: '' };
           onSuccess(newUser);
         }
       };
@@ -425,32 +427,27 @@
         const today = new Date();
         
         myCustomers.forEach(c => {
-          // 1. Meeting Alert
           if(c.appointmentDate) {
             const diff = Math.ceil((new Date(c.appointmentDate) - today) / (1000*60*60*24));
             if(diff === 0) arr.push({ title: 'นัดพบ/โทร วันนี้!', desc: `คุณมีนัดกับ ${c.name}`, icon: 'calendar-check', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', customer: c });
             else if(diff > 0 && diff <= 3) arr.push({ title: 'นัดหมายเร็วๆ นี้', desc: `นัด ${c.name} ใน ${diff} วัน (${toBuddhistYear(c.appointmentDate)})`, icon: 'clock', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200', customer: c });
           }
-          // 2. Birthday Alert
           if(c.dob) {
             const bday = new Date(c.dob); bday.setFullYear(today.getFullYear());
             if(bday < today && today.getMonth() > bday.getMonth()) bday.setFullYear(today.getFullYear() + 1);
             const diff = Math.ceil((bday - today) / (1000*60*60*24));
             if(diff >= 0 && diff <= 7) arr.push({ title: 'วันเกิดลูกค้า', desc: `${c.name} ครบรอบวันเกิดในอีก ${diff} วัน`, icon: 'gift', color: 'text-pink-600', bg: 'bg-pink-50 border-pink-200', customer: c });
           }
-          // 3. Renewal Alert
           if(c.policies) {
             c.policies.forEach(p => {
               const diff = Math.ceil((new Date(p.endDate) - today) / (1000*60*60*24));
               if(diff >= 0 && diff <= 30) arr.push({ title: 'แจ้งเตือนต่ออายุ', desc: `กรมธรรม์ ${p.planName} ของ ${c.name} จะหมดใน ${diff} วัน`, icon: 'file-text', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', customer: c });
             });
           }
-          // 4. Inactive Alert
           if(c.status !== 'ปิดการขาย' && c.lastContact) {
             const diff = Math.ceil((today - new Date(c.lastContact)) / (1000*60*60*24));
             if(diff > 30) arr.push({ title: 'Lead ไม่มีการอัปเดต', desc: `${c.name} ขาดการติดต่อนาน ${diff} วันแล้ว`, icon: 'warning-circle', color: 'text-red-600', bg: 'bg-red-50 border-red-200', customer: c });
           }
-          // 5. Aftercare Alert
           if(c.status === 'ปิดการขาย' && c.closedDate) {
             const diff = Math.ceil((today - new Date(c.closedDate)) / (1000*60*60*24));
             if(diff >= 90 && diff <= 95) arr.push({ title: 'ดูแลหลังการขาย (Aftercare)', desc: `ปิดการขาย ${c.name} ครบ 3 เดือนแล้ว โทรไปทักทายหน่อย`, icon: 'phone-call', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', customer: c });
@@ -458,6 +455,25 @@
         });
         return arr;
       }, [myCustomers]);
+
+      // --- TELEGRAM DAILY DIGEST ---
+      useEffect(() => {
+        if(alerts.length > 0) {
+           const todayStr = getTodayStr(); 
+           const storageKey = `telegram_notified_${user.id}_${todayStr}`;
+           
+           if(!localStorage.getItem(storageKey)) {
+              let msg = `📅 <b>สรุปแจ้งเตือนประจำวัน (Daily Alerts)</b>\nคุณ: ${user.name}\n\n`;
+              alerts.forEach(a => {
+                  msg += `• <b>${a.title}:</b> ${a.desc}\n`;
+              });
+              msg += `\n<i>เข้าสู่ระบบ Nova CRM เพื่อจัดการงานวันนี้</i>`;
+              
+              notifyTelegram(msg, user.telegramChatId || TELEGRAM_CHAT_ID);
+              localStorage.setItem(storageKey, 'true'); 
+           }
+        }
+      }, [alerts, user.id, user.name, user.telegramChatId]);
 
       return (
         <div className="space-y-10">
@@ -681,7 +697,7 @@
 
       const myCustomers = customers.filter(c => c.agent_id === user.id);
       const filtered = myCustomers.filter(c => {
-        const matchSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm);
+        const matchSearch = (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (c.phone || '').includes(searchTerm);
         const matchStatus = activeTab === 'ทั้งหมด' || c.status === activeTab;
         return matchSearch && matchStatus;
       });
@@ -714,7 +730,7 @@
                 
                 <div className="flex justify-between items-start mb-6 relative z-10">
                   <div className="flex items-center gap-4">
-                     <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors text-xl">{c.name.charAt(0)}</div>
+                     <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors text-xl">{(c.name || '?').charAt(0)}</div>
                      <div><h3 className="font-black text-xl text-slate-800">{c.name}</h3><p className="text-sm text-slate-500 flex items-center gap-1.5 mt-1 font-bold"><Icon name="phone" size={14}/> {c.phone}</p></div>
                   </div>
                 </div>
@@ -799,18 +815,27 @@
                     <div className="space-y-3"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">วันนัดหมายต่อไป</label><input type="date" name="appointmentDate" value={formData.appointmentDate} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-700" /></div>
                   </div>
 
-                  {/* EDITABLE DETAILS */}
+                  {/* EDITABLE DETAILS (แสดงข้อมูลครบถ้วน) */}
                   <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
-                    <h3 className="font-black text-slate-800 mb-6 text-2xl border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Icon name="user" size={28} className="text-blue-500"/> ข้อมูลลูกค้า</h3>
+                    <h3 className="font-black text-slate-800 mb-6 text-2xl border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Icon name="user" size={28} className="text-blue-500"/> ข้อมูลรายละเอียดลูกค้า</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">เบอร์โทร</label><input type="text" name="phone" value={formData.phone} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
-                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">Line ID</label><input type="text" name="lineId" value={formData.lineId} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
-                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={formData.interestedPlan} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black text-blue-600" /></div>
-                      <div className="lg:col-span-3 space-y-2"><label className="block text-xs font-black text-slate-400">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note} onChange={handleChange} rows={2} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-bold" /></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">ชื่อ-นามสกุล</label><input type="text" name="name" value={formData.name || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">เบอร์โทร</label><input type="text" name="phone" value={formData.phone || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">Line ID</label><input type="text" name="lineId" value={formData.lineId || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
+                      
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">เพศ</label><select name="gender" value={formData.gender || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"><option value="Male">ชาย</option><option value="Female">หญิง</option></select></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">วันเกิด (ค.ศ.)</label><input type="date" name="dob" value={formData.dob || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">อายุ (ปี)</label><input type="number" readOnly value={formData.age || 0} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-100 text-slate-500 font-black cursor-not-allowed" /></div>
+                      
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">อาชีพ</label><input type="text" name="occupation" value={formData.occupation || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">รายได้ต่อเดือน</label><select name="income" value={formData.income || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"><option>ต่ำกว่า 15,000</option><option>15,000 - 30,000</option><option>30,000 - 50,000</option><option>50,000 - 100,000</option><option>100,000+</option></select></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={formData.interestedPlan || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black text-blue-600" /></div>
+                      
+                      <div className="lg:col-span-3 space-y-2"><label className="block text-xs font-black text-slate-400">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note || ''} onChange={handleChange} rows={2} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-bold" /></div>
                     </div>
                   </div>
 
-                  {/* POLICIES (RESTORED) */}
+                  {/* POLICIES */}
                   {formData.status === 'ปิดการขาย' && (
                     <div className="bg-emerald-50/50 rounded-[2rem] p-8 border-2 border-emerald-200 shadow-inner">
                       <div className="flex justify-between items-center mb-8">
@@ -1007,7 +1032,7 @@
             <p className="text-indigo-200 font-bold text-lg max-w-xl mx-auto relative z-10 leading-relaxed">มีอะไรให้ช่วยไหม? ให้ AI วิเคราะห์แนวทางปิดการขาย สร้างสคริปต์ หรือเลือกแผนให้ตรงใจลูกค้าได้เลย!</p>
             <div className="mt-12 bg-white/10 p-4 rounded-3xl flex flex-col md:flex-row gap-4 backdrop-blur-xl border border-white/20 relative z-10 shadow-inner">
               <input type="text" placeholder="พิมพ์ข้อความที่นี่..." className="flex-1 bg-transparent border-none text-white outline-none placeholder-indigo-300 font-bold px-4 py-2" />
-              <button className="bg-indigo-500 px-8 py-4 rounded-2xl font-black hover:bg-indigo-400 shadow-lg transition text-lg">ส่งให้ AI คิด</button>
+              <button className="bg-indigo-500 px-8 py-4 rounded-2xl font-black hover:bg-indigo-400 shadow-lg transition text-lg">ส่งให้ AIคิด</button>
             </div>
           </div>
         </div>
@@ -1056,7 +1081,10 @@
 
     function AdminCustomersView({ customers, users, updateCustomer, deleteCustomer }) {
       const [search, setSearch] = useState('');
-      const filtered = customers.filter(c => c.name.includes(search) || c.phone.includes(search));
+      const [selectedCustomer, setSelectedCustomer] = useState(null); 
+
+      // เพิ่ม fallback (c.name || '') ป้องกันข้อมูลเก่าตกหล่นแล้วค้นหา Error
+      const filtered = customers.filter(c => (c.name || '').toLowerCase().includes(search.toLowerCase()) || (c.phone || '').includes(search));
 
       return (
         <div className="space-y-8">
@@ -1066,7 +1094,16 @@
           </div>
           <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden p-6">
             <table className="w-full text-left whitespace-nowrap">
-              <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest"><tr><th className="px-6 py-5 rounded-l-2xl">ชื่อลูกค้า</th><th className="px-6 py-5">เบอร์โทร</th><th className="px-6 py-5">สถานะ</th><th className="px-6 py-5">ตัวแทนผู้ดูแล</th><th className="px-6 py-5 text-right rounded-r-2xl">ยอดเบี้ย (ถ้ามี)</th></tr></thead>
+              <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest">
+                <tr>
+                  <th className="px-6 py-5 rounded-l-2xl">ชื่อลูกค้า</th>
+                  <th className="px-6 py-5">เบอร์โทร</th>
+                  <th className="px-6 py-5">สถานะ</th>
+                  <th className="px-6 py-5">ตัวแทนผู้ดูแล</th>
+                  <th className="px-6 py-5 text-right">ยอดเบี้ย (ถ้ามี)</th>
+                  <th className="px-6 py-5 text-center rounded-r-2xl">จัดการ</th>
+                </tr>
+              </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map(c => {
                   const agent = users.find(u => u.id === c.agent_id);
@@ -1077,27 +1114,47 @@
                       <td className="px-6 py-5"><span className="px-3 py-1.5 rounded-xl text-xs font-black border-2">{c.status}</span></td>
                       <td className="px-6 py-5 text-blue-600 font-black">{agent ? agent.name : 'Unknown'}</td>
                       <td className="px-6 py-5 text-right font-black text-emerald-600">{formatCurrency(c.premium)}</td>
+                      <td className="px-6 py-5 text-center">
+                        <button onClick={() => setSelectedCustomer(c)} className="text-blue-500 hover:bg-blue-100 bg-blue-50 px-4 py-2 rounded-xl font-black transition flex items-center gap-2 mx-auto text-xs">
+                          <Icon name="eye" size={16}/> ดูข้อมูล
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
+
+          {selectedCustomer && <CustomerModal customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onSave={updateCustomer} onDelete={deleteCustomer} />}
         </div>
       );
     }
 
     function SettingsView({ user, handleUpdateUser, showToast }) {
-      const [formData, setFormData] = useState({ name: user.name, targetRevenue: user.targetRevenue || 100000 });
+      const [formData, setFormData] = useState({ 
+        name: user.name, 
+        targetRevenue: user.targetRevenue || 100000,
+        telegramChatId: user.telegramChatId || '' 
+      });
+
       return (
         <div className="max-w-2xl mx-auto p-12 bg-white rounded-[3rem] shadow-sm border border-slate-100 text-center">
           <Icon name="gear" size={64} className="mx-auto text-slate-300 mb-6"/>
           <h2 className="text-3xl font-black mb-8">ตั้งค่าโปรไฟล์</h2>
           <div className="space-y-6 text-left">
             <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อ - นามสกุล</label><input type="text" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+            
             {user.role === 'agent' && (
               <div><label className="text-xs font-black block mb-2 text-slate-400">เป้ายอดขายต่อเดือน</label><input type="number" value={formData.targetRevenue} onChange={e=>setFormData({...formData, targetRevenue: Number(e.target.value)})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
             )}
+
+            <div>
+              <label className="text-xs font-black block mb-2 text-slate-400">Telegram Chat ID (สำหรับรับแจ้งเตือน Smart Alerts ส่วนตัว)</label>
+              <input type="text" placeholder="เช่น 123456789" value={formData.telegramChatId} onChange={e=>setFormData({...formData, telegramChatId: e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/>
+              <p className="text-[10px] font-bold text-slate-400 mt-2">หากต้องการรับแจ้งเตือนนัดหมาย/วันเกิดเฉพาะงานของคุณ สามารถค้นหา Chat ID ได้จาก @userinfobot ใน Telegram</p>
+            </div>
+
             <button onClick={() => { handleUpdateUser({...user, ...formData}); showToast('บันทึกการตั้งค่าโปรไฟล์เรียบร้อย!'); }} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-lg hover:bg-slate-800 transition">บันทึกการเปลี่ยนแปลง</button>
           </div>
         </div>
