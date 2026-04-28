@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -319,6 +320,7 @@
                 </>
               )}
               <div className="pt-4 mt-4 border-t border-slate-100">
+                <MenuLink icon="qr-code" label="1QR+" active={false} href="https://agency-trainning.carrd.co/" onClick={() => setSidebarOpen(false)} color="text-teal-500" bg="bg-teal-50 border-teal-100" />
                 <MenuLink icon="gear" label="ตั้งค่าโปรไฟล์" active={currentRoute === 'settings'} onClick={() => {setCurrentRoute('settings'); setSidebarOpen(false);}} color="text-slate-600" bg="bg-slate-100 border-slate-200" />
               </div>
             </nav>
@@ -382,9 +384,35 @@
       );
     }
 
-    function MenuLink({ icon, label, active, onClick, color, bg }) {
+    function MenuLink({ icon, label, active, onClick, color, bg, href }) {
+      const className = `w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-black group ${active ? `${bg} ${color} border-2 shadow-sm transform scale-[1.02]` : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 border-2 border-transparent'}`;
+      
+      // ฟังก์ชันเปิดลิงก์ที่บังคับทำงานให้ได้ 100% ไม่ว่าจะติดบล็อกอะไรก็ตาม
+      const handleNavigation = (e) => {
+        if (onClick) onClick(e);
+        try {
+            // พยายามเปิดแท็บใหม่
+            const newWin = window.open(href, '_blank', 'noopener,noreferrer');
+            // ถ้าแอปหรือเบราว์เซอร์บล็อก (เช่น ในแชทไลน์ หรือ Iframe แบบจำกัด)
+            if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+                window.location.href = href; // บังคับเปลี่ยนหน้าปัจจุบันไปเลย
+            }
+        } catch(err) {
+            window.location.href = href; // Fallback หากติด Error Strict Mode
+        }
+      };
+
+      if (href) {
+        return (
+          <button onClick={handleNavigation} className={className}>
+            <Icon name={icon} size={22} className={`${active ? color : 'text-slate-400 group-hover:'+color} transition-colors`} />
+            {label}
+          </button>
+        );
+      }
+      
       return (
-        <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-black group ${active ? `${bg} ${color} border-2 shadow-sm transform scale-[1.02]` : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 border-2 border-transparent'}`}>
+        <button onClick={onClick} className={className}>
           <Icon name={icon} size={22} className={`${active ? color : 'text-slate-400 group-hover:'+color} transition-colors`} />
           {label}
         </button>
