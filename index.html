@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -91,6 +92,42 @@
           parse_mode: "HTML"
         })
       }).catch(err => console.error("Telegram Error:", err));
+    };
+
+    const exportToCSV = (dataList, filename) => {
+      if (!dataList || dataList.length === 0) return alert("ไม่มีข้อมูลสำหรับ Export");
+      
+      const headers = ['ชื่อ-นามสกุล', 'เบอร์โทร', 'Line ID', 'เพศ', 'วันเกิด', 'อายุ', 'อาชีพ', 'รายได้', 'สถานะ', 'แผนที่สนใจ', 'เบี้ยประกันรวม', 'วันที่ติดต่อล่าสุด', 'แหล่งที่มา', 'หมายเหตุ'];
+      
+      const csvRows = dataList.map(c => {
+        const escapeStr = (str) => `"${(str || '').toString().replace(/"/g, '""')}"`;
+        return [
+          escapeStr(c.name),
+          `"=""${c.phone || ''}"""`, // แทรกสูตร Excel เพื่อรักษาเลข 0 ข้างหน้าเบอร์โทร
+          escapeStr(c.lineId),
+          escapeStr(c.gender === 'Male' ? 'ชาย' : c.gender === 'Female' ? 'หญิง' : c.gender),
+          escapeStr(c.dob),
+          escapeStr(c.age),
+          escapeStr(c.occupation),
+          escapeStr(c.income),
+          escapeStr(c.status),
+          escapeStr(c.interestedPlan),
+          escapeStr(c.premium || 0),
+          escapeStr(c.lastContact),
+          escapeStr(c.leadSource),
+          escapeStr((c.note || '').replace(/\n/g, ' '))
+        ].join(',');
+      });
+
+      const csvString = [headers.join(','), ...csvRows].join('\n');
+      const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' }); // \uFEFF คือ BOM ป้องกันภาษาไทยเพี้ยนใน Excel
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     };
 
     // --- CUSTOM CSS BAR CHART ---
@@ -757,7 +794,7 @@
                 <div className="lg:col-span-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">ชื่อ - นามสกุล *</label><input required type="text" name="name" value={formData.name} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-black text-slate-800" /></div>
                 <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เพศ</label><select name="gender" value={formData.gender} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black text-slate-800"><option value="Male">ชาย</option><option value="Female">หญิง</option></select></div>
                 <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">ว/ด/ป เกิด (ค.ศ.)</label><input type="date" name="dob" value={formData.dob} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black text-slate-800" /></div>
-                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">อายุ (ออโต้)</label><input type="number" readOnly value={formData.age} className="w-full px-5 py-4 border-2 border-slate-100 rounded-2xl bg-slate-50 text-slate-500 font-black cursor-not-allowed" /></div>
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">อายุ (ปี)</label><input type="number" name="age" value={formData.age} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black text-slate-800" /></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">สถานะครอบครัว</label><select name="familyStatus" value={formData.familyStatus} onChange={handleChange} className="w-full px-4 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black"><option>โสด</option><option>สมรส</option><option>หย่าร้าง</option></select></div>
                   <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">จำนวนบุตร</label><input type="number" name="children" value={formData.children} onChange={handleChange} min="0" className="w-full px-4 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black text-center" /></div>
@@ -847,9 +884,14 @@
               <h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={40}/> ฐานข้อมูลลูกค้า</h2>
               <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-sm">ค้นหา กรอง และจัดการข้อมูลลูกค้าในมือคุณ</p>
             </div>
-            <div className="relative w-full md:w-96">
-              <Icon name="magnifying-glass" className="absolute left-5 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-              <input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} className="w-full pl-14 pr-5 py-4 border-2 border-slate-200 rounded-2xl focus:border-blue-500 outline-none shadow-sm font-black" />
+            <div className="flex gap-3 w-full md:w-auto">
+              <div className="relative flex-1 md:w-96">
+                <Icon name="magnifying-glass" className="absolute left-5 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
+                <input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} className="w-full pl-14 pr-5 py-4 border-2 border-slate-200 rounded-2xl focus:border-blue-500 outline-none shadow-sm font-black" />
+              </div>
+              <button onClick={() => exportToCSV(filtered, `Customers_${user.name}.csv`)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 px-5 py-4 rounded-2xl font-black shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap" title="Export เป็นไฟล์ Excel">
+                <Icon name="file-csv" size={24} /> <span className="hidden sm:inline">Export CSV</span>
+              </button>
             </div>
           </div>
 
@@ -918,9 +960,10 @@
       const [newCareNote, setNewCareNote] = useState('');
 
       const handleChange = (e) => {
-        const { name, value } = e.target;
-        if(name === 'dob') setFormData(prev => ({ ...prev, [name]: value, age: calculateAge(value) }));
-        else setFormData(prev => ({ ...prev, [name]: value }));
+        const { name, value, type, checked } = e.target;
+        let newVal = type === 'checkbox' ? checked : value;
+        if(name === 'dob') setFormData(prev => ({ ...prev, [name]: newVal, age: calculateAge(newVal) }));
+        else setFormData(prev => ({ ...prev, [name]: newVal }));
       };
 
       const handleSave = () => {
@@ -1008,13 +1051,26 @@
                       
                       <div className="space-y-2"><label className="block text-xs font-black text-slate-400">เพศ</label><select name="gender" value={formData.gender || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"><option value="Male">ชาย</option><option value="Female">หญิง</option></select></div>
                       <div className="space-y-2"><label className="block text-xs font-black text-slate-400">วันเกิด (ค.ศ.)</label><input type="date" name="dob" value={formData.dob || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
-                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">อายุ (ปี)</label><input type="number" readOnly value={formData.age || 0} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-100 text-slate-500 font-black cursor-not-allowed" /></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400">อายุ (ปี)</label><input type="number" name="age" value={formData.age || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
                       
                       <div className="space-y-2"><label className="block text-xs font-black text-slate-400">อาชีพ</label><input type="text" name="occupation" value={formData.occupation || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black" /></div>
                       <div className="space-y-2"><label className="block text-xs font-black text-slate-400">รายได้ต่อเดือน</label><select name="income" value={formData.income || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"><option>ต่ำกว่า 15,000</option><option>15,000 - 30,000</option><option>30,000 - 50,000</option><option>50,000 - 100,000</option><option>100,000+</option></select></div>
                       <div className="space-y-2"><label className="block text-xs font-black text-slate-400">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={formData.interestedPlan || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black text-blue-600" /></div>
                       
                       <div className="lg:col-span-3 space-y-2"><label className="block text-xs font-black text-slate-400">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note || ''} onChange={handleChange} rows={2} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-bold" /></div>
+                    </div>
+
+                    <div className="mt-8 space-y-6 border-t-2 border-slate-100 pt-6">
+                      <label className="flex items-center gap-4 bg-purple-50 p-6 rounded-2xl border-2 border-purple-200 cursor-pointer shadow-inner">
+                        <input type="checkbox" name="hasOldPolicy" checked={formData.hasOldPolicy || false} onChange={handleChange} className="w-6 h-6 text-purple-600 rounded-lg" />
+                        <span className="font-black text-purple-900 text-lg">ลูกค้ามีประกันเดิมอยู่แล้ว</span>
+                      </label>
+                      {formData.hasOldPolicy && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-3xl border-2 border-slate-200 shadow-sm animate-in fade-in zoom-in duration-300">
+                          <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เบี้ยประกันเดิม (ต่อปี)</label><input type="number" name="oldPremium" value={formData.oldPremium || ''} onChange={handleChange} className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl outline-none font-black" /></div>
+                          <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">รายละเอียดกรมธรรม์เดิม</label><input type="text" name="oldPolicyDetails" value={formData.oldPolicyDetails || ''} onChange={handleChange} placeholder="เช่น สุขภาพเหมาจ่าย AIA" className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl outline-none font-black" /></div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1423,7 +1479,15 @@
         <div className="space-y-8">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div><h2 className="text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={40}/> ฐานข้อมูลรวม (Admin)</h2></div>
-            <div className="w-full md:w-96 relative"><Icon name="magnifying-glass" className="absolute left-5 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-14 pr-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-bold focus:border-emerald-500" /></div>
+            <div className="flex gap-3 w-full md:w-auto">
+              <div className="w-full md:w-96 relative">
+                <Icon name="magnifying-glass" className="absolute left-5 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
+                <input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-14 pr-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-bold focus:border-emerald-500" />
+              </div>
+              <button onClick={() => exportToCSV(filtered, `All_Customers_Admin.csv`)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 px-5 py-4 rounded-2xl font-black shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap" title="Export เป็นไฟล์ Excel">
+                <Icon name="file-csv" size={24} /> <span className="hidden sm:inline">Export CSV</span>
+              </button>
+            </div>
           </div>
           <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden p-6">
             <table className="w-full text-left whitespace-nowrap">
