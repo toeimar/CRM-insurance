@@ -10,6 +10,8 @@
   <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.20/babel.min.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -273,6 +275,101 @@
       document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
 
+    // ============================================================
+    // EXCEL BACKUP — ส่งออกข้อมูลลูกค้าเป็นไฟล์ .xlsx
+    // ============================================================
+    const exportCustomersToExcel = (customers, agentName, timestamp) => {
+      const XLSX = window.XLSX;
+      const wb = XLSX.utils.book_new();
+
+      // --- Sheet 1: ข้อมูลลูกค้าทั้งหมด ---
+      const headers = [
+        'ชื่อ-นามสกุล','เบอร์โทร','Line ID','เพศ','วันเกิด','อายุ',
+        'อาชีพ','รายได้ต่อเดือน','สถานะ','แผนที่สนใจ',
+        'เบี้ยประกันรวม (บาท)','วันที่ปิดการขาย','วันนัดหมาย',
+        'ติดต่อล่าสุด','แหล่งที่มา','AI Score','มีประกันเดิม',
+        'เบี้ยเดิม (บาท)','รายละเอียดประกันเดิม','หมายเหตุ',
+        'จำนวนกรมธรรม์','สถานะครอบครัว','จำนวนบุตร'
+      ];
+
+      const rows = customers.map(c => [
+        c.name || '',
+        c.phone || '',
+        c.lineId || '',
+        c.gender === 'Male' ? 'ชาย' : c.gender === 'Female' ? 'หญิง' : (c.gender || ''),
+        c.dob ? toBuddhistYear(c.dob) : '',
+        c.age || 0,
+        c.occupation || '',
+        c.income || '',
+        c.status || '',
+        c.interestedPlan || '',
+        Number(c.premium) || 0,
+        c.closedDate ? toBuddhistYear(c.closedDate) : '',
+        c.appointmentDate ? toBuddhistYear(c.appointmentDate) : '',
+        c.lastContact ? toBuddhistYear(c.lastContact) : '',
+        c.leadSource || '',
+        c.ai_score || 0,
+        c.hasOldPolicy ? 'มี' : 'ไม่มี',
+        Number(c.oldPremium) || 0,
+        c.oldPolicyDetails || '',
+        (c.note || '').replace(/\n/g, ' '),
+        (c.policies || []).length,
+        c.familyStatus || '',
+        c.children || 0,
+      ]);
+
+      const wsData = [headers, ...rows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // กำหนดความกว้างคอลัมน์
+      ws['!cols'] = [
+        {wch:22},{wch:14},{wch:14},{wch:6},{wch:14},{wch:5},
+        {wch:16},{wch:18},{wch:14},{wch:22},
+        {wch:18},{wch:14},{wch:14},
+        {wch:14},{wch:16},{wch:10},{wch:12},
+        {wch:14},{wch:24},{wch:28},
+        {wch:14},{wch:14},{wch:10}
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'ข้อมูลลูกค้า');
+
+      // --- Sheet 2: สรุปตามสถานะ ---
+      const summaryHeaders = ['สถานะ', 'จำนวน (ราย)', 'ยอดเบี้ยรวม (บาท)'];
+      const summaryRows = STATUS_LIST.map(s => {
+        const list = customers.filter(c => c.status === s);
+        return [s, list.length, list.reduce((acc,c)=>acc+Number(c.premium||0),0)];
+      });
+      const totalRow = ['รวมทั้งหมด', customers.length, customers.reduce((acc,c)=>acc+Number(c.premium||0),0)];
+      const wsSummary = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows, totalRow]);
+      wsSummary['!cols'] = [{wch:16},{wch:14},{wch:20}];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'สรุปตามสถานะ');
+
+      // --- Sheet 3: กรมธรรม์ทั้งหมด ---
+      const policyHeaders = ['ชื่อลูกค้า','เบอร์โทร','ชื่อแผน','เลขกรมธรรม์','รอบชำระ','วันทำสัญญา','วันต่ออายุ','เบี้ย (บาท)'];
+      const policyRows = [];
+      customers.forEach(c => {
+        (c.policies || []).forEach(p => {
+          policyRows.push([
+            c.name || '',
+            c.phone || '',
+            p.planName || '',
+            p.policyNo || '',
+            p.cycle || '',
+            p.contractDate ? toBuddhistYear(p.contractDate) : '',
+            p.nextRenewal ? toBuddhistYear(p.nextRenewal) : (p.endDate ? toBuddhistYear(p.endDate) : ''),
+            Number(p.premium) || 0,
+          ]);
+        });
+      });
+      const wsPolicy = XLSX.utils.aoa_to_sheet([policyHeaders, ...policyRows]);
+      wsPolicy['!cols'] = [{wch:22},{wch:14},{wch:22},{wch:16},{wch:12},{wch:14},{wch:14},{wch:14}];
+      XLSX.utils.book_append_sheet(wb, wsPolicy, 'กรมธรรม์');
+
+      // ดาวน์โหลดไฟล์
+      const fname = `IA_CRM_Backup_${agentName}_${timestamp.replace(/[: ]/g,'-')}.xlsx`;
+      XLSX.writeFile(wb, fname);
+      return fname;
+    };
+
     const getWeekKey = () => {
       const now = new Date();
       const startOfYear = new Date(now.getFullYear(), 0, 1);
@@ -280,55 +377,38 @@
       return `${now.getFullYear()}-W${weekNum}`;
     };
 
+    // Weekly Auto Backup → Excel
     const runWeeklyBackup = (customers, user) => {
       const key = `weekly_backup_${user.id}_${getWeekKey()}`;
       if (localStorage.getItem(key)) return;
       const myCustomers = customers.filter(c => c.agent_id === user.id);
       if (myCustomers.length === 0) return;
-      const json = JSON.stringify(myCustomers, null, 2);
-      const chunks = [];
-      const chunkSize = 3500;
-      for (let i = 0; i < json.length; i += chunkSize) chunks.push(json.slice(i, i + chunkSize));
-      const header = `📦 <b>Backup รายสัปดาห์ - ${getWeekKey()}</b>\n👤 ตัวแทน: ${user.name}\n📊 ลูกค้าทั้งหมด: ${myCustomers.length} ราย\n💰 ปิดการขาย: ${myCustomers.filter(c=>c.status==='ปิดการขาย').length} ราย\n\n`;
+
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      exportCustomersToExcel(myCustomers, user.name, timestamp);
+
       const summaryLines = myCustomers.map(c => `• ${c.name} | ${c.phone} | ${c.status} | ${formatCurrency(c.premium)}`).join('\n');
-      const summaryMsg = header + summaryLines.slice(0, 3000);
-      // [DISABLED] ระงับการส่งข้อความสรุปและ JSON ไป Telegram
-      // notifyTelegram(summaryMsg, user.telegramChatId || TELEGRAM_CHAT_ID);
-      // chunks.forEach((chunk, i) => {
-      //   setTimeout(() => {
-      //     notifyTelegram('JSON Backup chunk', user.telegramChatId || TELEGRAM_CHAT_ID);
-      //   }, (i+1) * 2000);
-      // });
+      const header = `📦 <b>Backup รายสัปดาห์ - ${getWeekKey()}</b>\n👤 ตัวแทน: ${user.name}\n📊 ลูกค้าทั้งหมด: ${myCustomers.length} ราย\n💰 ปิดการขาย: ${myCustomers.filter(c=>c.status==='ปิดการขาย').length} ราย\n\n`;
+      // [DISABLED] ระงับการส่งสรุปไป Telegram
+      // notifyTelegram(header + summaryLines.slice(0, 3000), user.telegramChatId || TELEGRAM_CHAT_ID);
       localStorage.setItem(key, 'true');
     };
 
-    // Manual backup function
+    // Manual Backup → Excel
     const runManualBackup = (customers, user, showToast) => {
       const myCustomers = customers.filter(c => c.agent_id === user.id);
       if (myCustomers.length === 0) { showToast('ไม่มีข้อมูลลูกค้าสำหรับ Backup', 'error'); return; }
       const now = new Date();
       const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      const json = JSON.stringify(myCustomers, null, 2);
-      const chunks = [];
-      const chunkSize = 3500;
-      for (let i = 0; i < json.length; i += chunkSize) chunks.push(json.slice(i, i + chunkSize));
-      const header = `📦 <b>Manual Backup - ${timestamp}</b>\n👤 ตัวแทน: ${user.name}\n📊 ลูกค้าทั้งหมด: ${myCustomers.length} ราย\n💰 ปิดการขาย: ${myCustomers.filter(c=>c.status==='ปิดการขาย').length} ราย\n\n`;
-      const summaryLines = myCustomers.map(c => `• ${c.name} | ${c.phone} | ${c.status} | ${formatCurrency(c.premium)}`).join('\n');
-      // [DISABLED] ระงับการส่งข้อความสรุปและ JSON chunks ไป Telegram
+
+      const fname = exportCustomersToExcel(myCustomers, user.name, timestamp);
+
+      // [DISABLED] ระงับการส่งสรุปไป Telegram
+      // const summaryLines = myCustomers.map(c => `• ${c.name} | ${c.phone} | ${c.status} | ${formatCurrency(c.premium)}`).join('\n');
       // notifyTelegram(header + summaryLines.slice(0, 3000), user.telegramChatId || TELEGRAM_CHAT_ID);
-      // chunks.forEach((chunk, i) => {
-      //   setTimeout(() => {
-      //     notifyTelegram('JSON Backup chunk', user.telegramChatId || TELEGRAM_CHAT_ID);
-      //   }, (i+1) * 2000);
-      // });
-      // [DISABLED] ระงับการดาวน์โหลดไฟล์ JSON ลงเครื่อง
-      // const blob = new Blob([json], { type: 'application/json' });
-      // const url = URL.createObjectURL(blob);
-      // const link = document.createElement('a');
-      // link.href = url;
-      // link.setAttribute('download', 'IA_CRM_Backup.json');
-      // document.body.appendChild(link); link.click(); document.body.removeChild(link);
-      showToast(`Backup บันทึกแล้ว (${myCustomers.length} ราย) — ${timestamp}`);
+
+      showToast(`Backup สำเร็จ! ดาวน์โหลด ${fname} (${myCustomers.length} ราย)`);
     };
 
     function CSSBarChart({ data }) {
@@ -419,7 +499,6 @@
       });
       const [currentRoute, setCurrentRoute] = useState('home');
       const [isSidebarOpen, setSidebarOpen] = useState(false);
-      // Pending approval state for admin
       const [pendingUsers, setPendingUsers] = useState([]);
 
       const showToast = (msg, type='success') => { setToastMsg(msg); setToastType(type); setTimeout(() => setToastMsg(null), 3500); };
@@ -449,9 +528,7 @@
         if(!db) return;
         const unsubU = db.collection('crm_users').onSnapshot(snap => {
           const arr=[]; snap.forEach(d=>arr.push(d.data())); setUsers(arr);
-          // Separate pending users
-          const pending = arr.filter(u => u.status === 'pending');
-          setPendingUsers(pending);
+          setPendingUsers(arr.filter(u => u.status === 'pending'));
         });
         const unsubC = db.collection('crm_customers').onSnapshot(snap => { const arr=[]; snap.forEach(d=>arr.push(d.data())); setCustomers(arr); });
         const unsubT = db.collection('crm_tasks').onSnapshot(snap => { const arr=[]; snap.forEach(d=>arr.push(d.data())); setTasks(arr); });
@@ -472,7 +549,6 @@
       };
       const removeData = async (col, id) => { if(db) { try { await db.collection(col).doc(id).delete(); } catch {} } };
 
-      // ===== APPROVE / REJECT user =====
       const approveUser = async (user) => {
         const approved = {...user, status: 'active'};
         await writeData('crm_users', user.id, approved);
@@ -495,7 +571,7 @@
           if(!isAdmin) {
             notifyTelegram(`👤 <b>ผู้ใช้ใหม่ขอลงทะเบียน (รออนุมัติ):</b>\nชื่อ: ${user.name}\nทีม: ${user.team}\nอีเมล: ${user.email}`);
             showToast('ลงทะเบียนสำเร็จ! รอ Admin อนุมัติก่อนใช้งานได้', 'success');
-            return; // Do not log in yet
+            return;
           }
           localStorage.setItem('crm_logged_in_user', JSON.stringify(newUser));
           setCurrentUser(newUser); setCurrentRoute('home');
@@ -560,7 +636,6 @@
       if(appState==='loading') return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Icon name="spinner-gap" size={48} className="animate-spin mb-4 text-blue-500"/><p className="font-bold text-slate-400">กำลังเชื่อมต่อฐานข้อมูล...</p></div>;
       if(!currentUser) return <AuthView onSuccess={handleAuthSuccess} users={users}/>;
 
-      // Check if current user is still pending (in case they were already logged in)
       const liveUser = users.find(u=>u.id===currentUser.id);
       if(liveUser && liveUser.status === 'pending') {
         return (
@@ -643,11 +718,10 @@
               </div>
               <div className="flex items-center gap-2 lg:gap-4">
                 <TimeDisplay/>
-                {/* Manual Backup Button */}
                 {currentUser.role==='agent' && (
-                  <button onClick={()=>runManualBackup(customers, currentUser, showToast)} className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl border bg-indigo-50 border-indigo-100 hover:bg-indigo-100 transition" title="Backup ข้อมูล">
-                    <Icon name="cloud-arrow-up" size={18} className="text-indigo-600"/>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700 hidden lg:inline">Backup</span>
+                  <button onClick={()=>runManualBackup(customers, currentUser, showToast)} className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl border bg-indigo-50 border-indigo-100 hover:bg-indigo-100 transition" title="Backup ข้อมูลเป็น Excel">
+                    <Icon name="microsoft-excel-logo" size={18} className="text-indigo-600"/>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700 hidden lg:inline">Backup Excel</span>
                   </button>
                 )}
                 <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border bg-emerald-50 border-emerald-100">
@@ -688,8 +762,8 @@
                           <Icon name={item.icon} size={32}/>{item.label}
                         </button>
                       ))}
-                      <button onClick={()=>runManualBackup(customers, currentUser, showToast)} className="bg-blue-600 text-white p-6 rounded-3xl font-black flex flex-col items-center gap-3 shadow-lg hover:opacity-90 transition">
-                        <Icon name="cloud-arrow-up" size={32}/> Backup
+                      <button onClick={()=>runManualBackup(customers, currentUser, showToast)} className="bg-emerald-600 text-white p-6 rounded-3xl font-black flex flex-col items-center gap-3 shadow-lg hover:opacity-90 transition">
+                        <Icon name="microsoft-excel-logo" size={32}/> Backup Excel
                       </button>
                     </div>
                   </div>
@@ -845,7 +919,7 @@
     }
 
     // ============================================================================
-    // DAILY PLAN VIEW (ตัดกิจกรรมประจำวัน Grid ออก, เก็บฟีเจอร์ทั้งหมด)
+    // DAILY PLAN VIEW
     // ============================================================================
     function DailyPlanView({ user, customers, tasks, addTask, toggleTask, removeTask }) {
       const today = getTodayStr();
@@ -897,7 +971,6 @@
         return arr;
       }, [user.id]);
 
-      // Monthly review from image
       const monthKey = `monthly_review_${user.id}_${new Date().getFullYear()}_${new Date().getMonth()}`;
       const loadMonthly = () => { try { return JSON.parse(localStorage.getItem(monthKey) || '{}'); } catch { return {}; } };
       const [monthly, setMonthly] = useState(loadMonthly);
@@ -915,7 +988,6 @@
 
       return (
         <div className="space-y-6 fade-up max-w-4xl mx-auto">
-          {/* HEADER */}
           <div className={`${dc.bg} border-2 ${dc.border} rounded-3xl p-6`}>
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
               <div>
@@ -929,7 +1001,6 @@
             </div>
           </div>
 
-          {/* TODAY'S GOAL */}
           <div className="bg-white rounded-3xl border-2 border-slate-100 p-6 shadow-sm">
             <h3 className="font-black text-slate-700 mb-4 flex items-center gap-2 text-lg"><Icon name="target" size={24} className="text-orange-500"/> Today's Goal</h3>
             <textarea value={plan.goal || ''} onChange={e => setPlanField('goal', e.target.value)} rows={3}
@@ -937,7 +1008,6 @@
               className="w-full px-4 py-3 border-2 border-orange-200 bg-orange-50 rounded-2xl outline-none font-bold text-slate-800 placeholder-orange-300 focus:border-orange-400 resize-none"/>
           </div>
 
-          {/* MINDSET CHECKLIST + RADAR */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-3xl border-2 border-slate-100 p-6 shadow-sm">
               <h3 className="font-black text-slate-700 mb-4 flex items-center gap-2 text-lg"><Icon name="brain" size={24} className="text-purple-500"/> Mindset Checklist</h3>
@@ -956,7 +1026,6 @@
             </div>
           </div>
 
-          {/* TARGET TABLE */}
           <div className="bg-white rounded-3xl border-2 border-slate-100 p-6 shadow-sm">
             <h3 className="font-black text-slate-700 mb-4 flex items-center gap-2 text-lg"><Icon name="flag" size={24} className="text-red-500"/> เป้าหมายรายบุคคล</h3>
             <div className="overflow-x-auto">
@@ -971,7 +1040,6 @@
             </div>
           </div>
 
-          {/* SITUATION TABLE */}
           <div className="bg-white rounded-3xl border-2 border-slate-100 p-6 shadow-sm">
             <h3 className="font-black text-slate-700 mb-4 flex items-center gap-2 text-lg"><Icon name="lightning" size={24} className="text-yellow-500"/> สถานการณ์ & แผนรับมือ</h3>
             <div className="overflow-x-auto">
@@ -991,7 +1059,6 @@
             </div>
           </div>
 
-          {/* ===== MONTHLY REVIEW (from image) ===== */}
           <div className="bg-white rounded-3xl border-2 border-slate-100 p-6 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
               <h3 className="font-black text-slate-700 flex items-center gap-2 text-lg"><Icon name="pencil-simple-line" size={24} className="text-indigo-500"/> สรุปแผนและเป้าหมาย</h3>
@@ -1022,7 +1089,6 @@
             </div>
           </div>
 
-          {/* TASKS TODAY */}
           <div className="bg-white rounded-3xl border-2 border-slate-100 p-6 shadow-sm">
             <h3 className="font-black text-slate-700 mb-4 flex items-center gap-2 text-lg"><Icon name="check-square" size={24} className="text-emerald-500"/> งานวันนี้</h3>
             <div className="flex gap-2 mb-4">
@@ -1047,7 +1113,6 @@
             </div>
           </div>
 
-          {/* WEEKLY STATS */}
           <div className="bg-white rounded-3xl border-2 border-slate-100 p-6 shadow-sm">
             <h3 className="font-black text-slate-700 mb-4 flex items-center gap-2 text-lg"><Icon name="chart-bar" size={24} className="text-indigo-500"/> สถิติ Mindset 7 วัน</h3>
             <div className="flex items-end gap-2 h-28">
@@ -1104,7 +1169,6 @@
       },0);
       const progress = Math.min(100,Math.round((monthRev/(user.targetRevenue||1))*100));
 
-      // --- SMART ALERTS ---
       const alerts = useMemo(()=>{
         const arr=[]; const today=new Date();
         myCustomers.forEach(c=>{
@@ -1147,21 +1211,7 @@
           if(!localStorage.getItem(storageKey)){
             const inactiveAlerts=alerts.filter(a=>a.title==='Lead ไม่มีการอัปเดต');
             const otherAlerts=alerts.filter(a=>a.title!=='Lead ไม่มีการอัปเดต');
-            if(todaysTasks.length>0||otherAlerts.length>0){
-              let msg=`📅 <b>สรุปงานและแจ้งเตือนประจำวัน</b>\nคุณ: ${user.name}\n\n`;
-              if(todaysTasks.length>0){ msg+=`📝 <b>สิ่งที่ต้องทำวันนี้ (Tasks):</b>\n`; todaysTasks.forEach(t=>{msg+=`• [ ] ${t.title}\n`;}); msg+=`\n`; }
-              if(otherAlerts.length>0){ msg+=`💡 <b>Smart Alerts:</b>\n`; otherAlerts.forEach(a=>{msg+=`• <b>${a.title}:</b> ${a.desc}\n`;}); }
-              msg+=`\n<i>เข้าสู่ระบบ IA CRM เพื่อจัดการงานวันนี้เลย!</i>`;
-              // [DISABLED] ระงับการส่งแจ้งเตือนประจำวันไป Telegram
-              // notifyTelegram(msg, user.telegramChatId||TELEGRAM_CHAT_ID);
-            }
-            if(inactiveAlerts.length>0){
-              let msg=`⚠️ <b>แจ้งเตือนลูกค้าขาดการติดต่อ (เกิน 30 วัน)</b>\n👤 ตัวแทน: ${user.name}\n\n`;
-              inactiveAlerts.forEach(a=>{msg+=`• ${a.desc}\n`;});
-              msg+=`\n<i>กรุณาอัปเดตการดูแลลูกค้าในระบบด่วน!</i>`;
-              // [DISABLED] ระงับการส่งแจ้งเตือน inactive ไป Telegram
-              // notifyTelegram(msg, TELEGRAM_CHAT_ID);
-            }
+            // [DISABLED] ระงับการส่งแจ้งเตือนประจำวันไป Telegram
             localStorage.setItem(storageKey,'true');
           }
         }
@@ -1169,34 +1219,16 @@
 
       useEffect(()=>{
         const checkScheduledNotify = () => {
-          const now = new Date();
-          const hhmm = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-          const dateStr = getTodayStr();
-          const key08 = `sched_08_${user.id}_${dateStr}`;
-          const key19 = `sched_19_${user.id}_${dateStr}`;
-          const pendingTasks = myTasks.filter(t=>t.status!=='completed'&&t.date===dateStr);
-          const buildMsg = (label) => {
-            let msg=`⏰ <b>${label} - Daily Digest</b>\n👤 ${user.name}\n\n`;
-            if(pendingTasks.length>0){ msg+=`📋 <b>งานที่ยังค้างวันนี้ (${pendingTasks.length} รายการ):</b>\n`; pendingTasks.forEach(t=>{ const pri = t.priority==='high'?'🔴':t.priority==='low'?'🟢':'🟡'; msg+=`${pri} ${t.title}${t.time?` (${t.time})`:''}\n`; }); } else { msg+=`✅ ไม่มีงานค้างวันนี้\n`; }
-            const todayAlerts = alerts.filter(a=>a.title!=='Lead ไม่มีการอัปเดต');
-            if(todayAlerts.length>0){ msg+=`\n💡 <b>Smart Alerts (${todayAlerts.length}):</b>\n`; todayAlerts.slice(0,5).forEach(a=>{msg+=`• ${a.title}: ${a.desc}\n`;}); }
-            msg+=`\n<i>IA CRM - ขอให้มีวันที่ดี! 💪</i>`;
-            return msg;
-          };
           // [DISABLED] ระงับการส่งสรุปงาน 08:00 & 19:00 ไป Telegram
-          // if(hhmm==='08:00' && !localStorage.getItem(key08)){ notifyTelegram(buildMsg('สวัสดีตอนเช้า'), user.telegramChatId||TELEGRAM_CHAT_ID); localStorage.setItem(key08,'true'); }
-          // if(hhmm==='19:00' && !localStorage.getItem(key19)){ notifyTelegram(buildMsg('สรุปงานตอนเย็น'), user.telegramChatId||TELEGRAM_CHAT_ID); localStorage.setItem(key19,'true'); }
         };
         checkScheduledNotify();
         const interval = setInterval(checkScheduledNotify, 30000);
         return ()=>clearInterval(interval);
       },[myTasks,alerts,user]);
 
-      // Calendar helpers
       const getDaysInMonth = (year,month) => new Date(year,month+1,0).getDate();
       const getFirstDayOfMonth = (year,month) => new Date(year,month,1).getDay();
 
-      // Build unified calendar events: tasks + appointments + renewals + birthdays
       const calendarEvents = useMemo(() => {
         const map = {};
         const addEvent = (dateStr, event) => {
@@ -1204,19 +1236,15 @@
           if(!map[dateStr]) map[dateStr] = [];
           map[dateStr].push(event);
         };
-        // Tasks
         myTasks.forEach(t => addEvent(t.date, { type: 'task', label: `${t.time?t.time+' ':''}${t.title}`, priority: t.priority, status: t.status, id: t.id, raw: t }));
-        // Customer appointments
         myCustomers.forEach(c => {
           if(c.appointmentDate) addEvent(c.appointmentDate, { type: 'appointment', label: `📅 นัด: ${c.name}`, color: 'bg-blue-100 text-blue-700', customer: c });
-          // Policy renewals
           if(c.policies) {
             c.policies.forEach(p => {
               const renewDate = p.nextRenewal || p.endDate;
               if(renewDate) addEvent(renewDate, { type: 'renewal', label: `🔄 ต่ออายุ: ${p.planName} (${c.name})`, color: 'bg-orange-100 text-orange-700', customer: c });
             });
           }
-          // Birthday this year
           if(c.dob) {
             const bday = new Date(c.dob);
             const thisYearBday = `${new Date().getFullYear()}-${String(bday.getMonth()+1).padStart(2,'0')}-${String(bday.getDate()).padStart(2,'0')}`;
@@ -1243,7 +1271,6 @@
 
       return (
         <div className="space-y-6 lg:space-y-10">
-          {/* HERO CARD */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-8 fade-up fade-up-1">
             <div className="lg:col-span-2 dow-accent rounded-[2rem] lg:rounded-[3rem] p-6 lg:p-12 text-white shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -mt-20 -mr-20 pointer-events-none"></div>
@@ -1291,9 +1318,7 @@
             </div>
           </div>
 
-          {/* SMART ALERTS + CALENDAR */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
-            {/* SMART ALERTS */}
             <div className="bg-white rounded-[2rem] lg:rounded-[3rem] shadow-sm border border-slate-100 flex flex-col h-[600px] lg:h-[700px] overflow-hidden fade-up fade-up-3">
               <div className="p-6 lg:p-10 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <div>
@@ -1317,7 +1342,6 @@
               </div>
             </div>
 
-            {/* UNIFIED CALENDAR */}
             <div className="bg-white rounded-[2rem] lg:rounded-[3rem] shadow-sm border border-slate-100 flex flex-col h-[600px] lg:h-[700px] overflow-hidden fade-up fade-up-4">
               <div className="p-4 lg:p-6 border-b border-slate-100 bg-slate-50/50">
                 <div className="flex justify-between items-center mb-2">
@@ -1328,7 +1352,6 @@
                     <button onClick={()=>setCalendarMonth(new Date(calYear,calMonth+1,1))} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition"><Icon name="caret-right" size={18}/></button>
                   </div>
                 </div>
-                {/* Legend */}
                 <div className="flex flex-wrap gap-2 text-[10px] font-black">
                   <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-lg flex items-center gap-1"><span>📅</span>นัดหมาย</span>
                   <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded-lg flex items-center gap-1"><span>🔄</span>ต่ออายุ</span>
@@ -1354,7 +1377,6 @@
                     const ccBg = colBgColors[col];
                     const hasHighTask = dayEvents.some(e=>e.type==='task'&&e.priority==='high'&&e.status!=='completed');
                     const hasPending = dayEvents.some(e=>e.status!=='completed'||e.type!=='task');
-
                     return (
                       <div key={day} onClick={() => setSelectedCalDay(isSelected ? null : dateStr)}
                         className={`min-h-[70px] lg:min-h-[85px] rounded-xl border-2 p-1 cursor-pointer transition-all relative ${isToday ? 'dow-accent border-transparent shadow-lg' : isSelected ? `${ccBg} ${cc} shadow-md` : `${ccBg} ${cc} hover:shadow-md`}`}>
@@ -1372,7 +1394,6 @@
                   })}
                 </div>
 
-                {/* Selected day detail */}
                 {selectedCalDay && (calendarEvents[selectedCalDay]||[]).length > 0 && (
                   <div className="mt-3 bg-slate-50 rounded-2xl p-4 border-2 border-slate-200 fade-up">
                     <p className="font-black text-slate-700 mb-3 flex items-center gap-2 text-sm"><Icon name="calendar" size={16} className="text-blue-500"/> {toBuddhistYear(selectedCalDay)} — {(calendarEvents[selectedCalDay]||[]).length} กิจกรรม</p>
@@ -1402,7 +1423,6 @@
                   </div>
                 )}
 
-                {/* Quick add task */}
                 <div className="mt-3 bg-white rounded-2xl border-2 border-slate-200 p-3">
                   <p className="text-xs font-black text-slate-400 mb-2 uppercase">เพิ่มงานใหม่</p>
                   <div className="flex flex-wrap gap-2">
@@ -1547,796 +1567,781 @@
                 </div>
                 <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">วันที่นัดหมาย (เข้าพบ/นัดโทร)</label><input type="date" name="appointmentDate" value={formData.appointmentDate} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black"/></div>
                 <div className="md:col-span-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note} onChange={handleChange} rows={4} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-bold text-slate-800"></textarea></div>
-
-```
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-4 pt-8 border-t-2 border-slate-100">
-          <button type="button" onClick={()=>setRoute('home')} className="px-8 py-4 rounded-2xl font-black text-slate-500 hover:bg-slate-100 transition text-lg">ยกเลิก</button>
-          <button type="submit" className="px-10 py-4 rounded-2xl font-black text-white bg-gradient-to-r from-orange-500 to-red-500 shadow-xl shadow-orange-500/40 transform hover:-translate-y-1 transition text-lg"><Icon name="floppy-disk" size={22} className="inline mr-2"/> บันทึกข้อมูล Lead</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// ============================================================================
-// CUSTOMERS VIEW
-// ============================================================================
-function CustomersView({ user, customers, updateCustomer, deleteCustomer }) {
-  const [activeTab, setActiveTab] = useState('ทั้งหมด');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-
-  const myCustomers = customers.filter(c=>c.agent_id===user.id);
-  const filtered = myCustomers.filter(c=>{
-    const matchSearch=(c.name||'').toLowerCase().includes(searchTerm.toLowerCase())||(c.phone||'').includes(searchTerm);
-    let matchStatus=false;
-    if(activeTab==='ทั้งหมด') matchStatus=true;
-    else if(activeTab==='ขาดการติดต่อ'){
-      const diff=c.lastContact?Math.ceil((new Date()-new Date(c.lastContact))/(1000*60*60*24)):0;
-      matchStatus=diff>30&&c.status!=='ปิดการขาย';
-    } else matchStatus=c.status===activeTab;
-    return matchSearch&&matchStatus;
-  });
-
-  return (
-    <div className="space-y-6 lg:space-y-8 fade-up">
-      <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-2">
-        <div>
-          <h2 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={36}/> ฐานข้อมูลลูกค้า</h2>
-          <p className="text-slate-500 font-bold mt-1 uppercase tracking-widest text-xs">ค้นหา กรอง และจัดการข้อมูลลูกค้าในมือคุณ</p>
-        </div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <div className="relative flex-1 md:w-72"><Icon name="magnifying-glass" className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-12 pr-5 py-3 border-2 border-slate-200 rounded-2xl focus:border-blue-500 outline-none shadow-sm font-black text-sm"/></div>
-          <button onClick={()=>exportToCSV(filtered,`Customers_${user.name}.csv`)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 px-4 py-3 rounded-2xl font-black shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap" title="Export CSV"><Icon name="file-csv" size={20}/><span className="hidden sm:inline text-sm">Export</span></button>
-        </div>
-      </div>
-
-      <div className="flex overflow-x-auto custom-scrollbar gap-2 pb-3">
-        {['ทั้งหมด',...STATUS_LIST,'ขาดการติดต่อ'].map(tab=>{
-          let count=0;
-          if(tab==='ทั้งหมด') count=myCustomers.length;
-          else if(tab==='ขาดการติดต่อ') count=myCustomers.filter(c=>{const diff=c.lastContact?Math.ceil((new Date()-new Date(c.lastContact))/(1000*60*60*24)):0;return diff>30&&c.status!=='ปิดการขาย';}).length;
-          else count=myCustomers.filter(c=>c.status===tab).length;
-          return (
-            <button key={tab} onClick={()=>setActiveTab(tab)} className={`px-5 py-3 rounded-2xl font-black whitespace-nowrap transition-all border-2 text-sm ${activeTab===tab?(tab==='ขาดการติดต่อ'?'bg-red-500 text-white border-red-500 shadow-xl transform -translate-y-1':'dow-accent text-white border-transparent shadow-xl transform -translate-y-1'):'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
-              {tab} <span className={`ml-2 px-2.5 py-0.5 rounded-lg text-xs font-black ${activeTab===tab?'bg-white/20 text-white':'bg-slate-100 text-slate-500'}`}>{count}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-8">
-        {filtered.map((c,ci)=>(
-          <div key={c.id} className={`bg-white rounded-[2rem] p-6 lg:p-8 border-2 border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all relative overflow-hidden group fade-up`} style={{animationDelay:`${ci*0.04}s`}}>
-            <div className={`absolute top-0 right-0 w-20 h-20 rounded-bl-full -mr-3 -mt-3 opacity-20 ${c.status==='ปิดการขาย'?'bg-emerald-500':c.status==='ลีดใหม่'?'bg-blue-500':'bg-orange-500'}`}></div>
-            <div className="flex justify-between items-start mb-5 relative z-10">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors text-lg">{(c.name||'?').charAt(0)}</div>
-                <div><h3 className="font-black text-lg text-slate-800">{c.name}</h3><p className="text-sm text-slate-500 flex items-center gap-1.5 mt-0.5 font-bold"><Icon name="phone" size={12}/>{c.phone}</p></div>
               </div>
             </div>
-            <div className="mb-5"><span className={`inline-block px-3 py-1 rounded-xl text-xs font-black border-2 uppercase tracking-widest ${c.status==='ปิดการขาย'?'bg-emerald-50 border-emerald-200 text-emerald-700':c.status==='ลีดใหม่'?'bg-blue-50 border-blue-200 text-blue-700':c.status==='เสนอแบบ'?'bg-purple-50 border-purple-200 text-purple-700':'bg-orange-50 border-orange-200 text-orange-700'}`}>{c.status}</span></div>
-            <div className="space-y-2 mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <div className="flex justify-between text-sm border-b border-slate-200 pb-2"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">นัดล่าสุด</span><span className="font-black text-slate-800 text-sm">{c.appointmentDate?toBuddhistYear(c.appointmentDate):'-'}</span></div>
-              <div className="flex justify-between text-sm border-b border-slate-200 pb-2"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">AI Score</span><span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-600 text-base">{c.ai_score||0}/100</span></div>
-              <div className="flex justify-between text-sm items-center"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">แผนที่สนใจ</span><span className="font-black text-blue-600 truncate max-w-[130px] text-right text-sm">{c.interestedPlan||'-'}</span></div>
+
+            <div className="flex justify-end gap-4 pt-8 border-t-2 border-slate-100">
+              <button type="button" onClick={()=>setRoute('home')} className="px-8 py-4 rounded-2xl font-black text-slate-500 hover:bg-slate-100 transition text-lg">ยกเลิก</button>
+              <button type="submit" className="px-10 py-4 rounded-2xl font-black text-white bg-gradient-to-r from-orange-500 to-red-500 shadow-xl shadow-orange-500/40 transform hover:-translate-y-1 transition text-lg"><Icon name="floppy-disk" size={22} className="inline mr-2"/> บันทึกข้อมูล Lead</button>
             </div>
-            <button onClick={()=>setSelectedCustomer(c)} className="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-black rounded-2xl transition border-2 border-slate-200 hover:border-blue-300 flex items-center justify-center gap-2 text-sm">ดู / แก้ไขข้อมูล <Icon name="caret-right" size={16}/></button>
-          </div>
-        ))}
-        {filtered.length===0 && <div className="col-span-full bg-white p-16 rounded-[3rem] text-center border-2 border-slate-100"><Icon name="database" size={64} className="mx-auto text-slate-200 mb-5"/><h3 className="text-2xl font-black text-slate-600">ไม่พบข้อมูลลูกค้า</h3></div>}
-      </div>
-
-      {selectedCustomer && <CustomerModal customer={selectedCustomer} onClose={()=>setSelectedCustomer(null)} onSave={updateCustomer} onDelete={deleteCustomer}/>}
-    </div>
-  );
-}
-
-// ============================================================================
-// CUSTOMER MODAL
-// ============================================================================
-function CustomerModal({ customer, onClose, onSave, onDelete }) {
-  const [formData, setFormData] = useState({...customer});
-  const [isAddingPolicy, setIsAddingPolicy] = useState(false);
-  const [newPolicy, setNewPolicy] = useState({planName:'',policyNo:'',cycle:'รายปี',contractDate:'',endDate:'',premium:''});
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiInsight, setAiInsight] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
-  const [newlyAddedPoliciesForAlert, setNewlyAddedPoliciesForAlert] = useState([]);
-  const [newCareNote, setNewCareNote] = useState('');
-  const [lightboxSrc, setLightboxSrc] = useState(null);
-  const [activeAttachCategory, setActiveAttachCategory] = useState('general');
-  const fileInputRef = useRef(null);
-  const [leadSources] = useState(getLeadSources());
-
-  const ATTACH_CATEGORIES = [
-    { key: 'general',    label: 'ทั่วไป',        icon: 'image',        color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200' },
-    { key: 'id_card',    label: 'บัตรประชาชน',   icon: 'identification-card', color: 'text-blue-600', bg: 'bg-blue-50',   border: 'border-blue-200' },
-    { key: 'policy_doc', label: 'กรมธรรม์',      icon: 'file-text',    color: 'text-emerald-600',bg: 'bg-emerald-50', border: 'border-emerald-200'},
-    { key: 'health',     label: 'ผลตรวจสุขภาพ', icon: 'heart',        color: 'text-red-600',    bg: 'bg-red-50',    border: 'border-red-200' },
-    { key: 'finance',    label: 'เอกสารการเงิน', icon: 'money',        color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
-  ];
-
-  const handleChange = (e) => {
-    const {name,value,type,checked}=e.target;
-    const newVal=type==='checkbox'?checked:value;
-    if(name==='dob') setFormData(prev=>({...prev,[name]:newVal,age:calculateAge(newVal)}));
-    else setFormData(prev=>({...prev,[name]:newVal}));
-  };
-
-  const handleSave = () => {
-    if(formData.status==='ปิดการขาย'&&customer.status!=='ปิดการขาย') formData.closedDate=getTodayStr();
-    if(!formData.lastContact) formData.lastContact=getTodayStr();
-    onSave(formData, newlyAddedPoliciesForAlert); onClose();
-  };
-
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    const newAttachments = [];
-    for(const file of files){
-      if(!file.type.startsWith('image/')) continue;
-      const b64 = await toBase64(file);
-      newAttachments.push({ name: file.name, data: b64, date: getTodayStr(), category: activeAttachCategory, size: file.size });
+          </form>
+        </div>
+      );
     }
-    setFormData(prev => ({ ...prev, attachments: [...(prev.attachments||[]), ...newAttachments] }));
-  };
 
-  const removeAttachment = (idx) => { setFormData(prev=>({...prev,attachments:(prev.attachments||[]).filter((_,i)=>i!==idx)})); };
-  const getAttachByCategory = (cat) => (formData.attachments||[]).filter(a => a.category === cat || (!a.category && cat === 'general'));
+    // ============================================================================
+    // CUSTOMERS VIEW
+    // ============================================================================
+    function CustomersView({ user, customers, updateCustomer, deleteCustomer }) {
+      const [activeTab, setActiveTab] = useState('ทั้งหมด');
+      const [searchTerm, setSearchTerm] = useState('');
+      const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-  const handleAddPolicy = () => {
-    if(!newPolicy.planName||!newPolicy.contractDate) return alert("กรุณากรอกชื่อแผนและวันทำสัญญา");
-    const parsedPremium=Number(newPolicy.premium||0);
-    const nextRenewal = getNextRenewalDate(newPolicy.contractDate, newPolicy.cycle);
-    const policyToAdd={...newPolicy,premium:parsedPremium,nextRenewal};
-    setFormData(prev=>({...prev,premium:Number(prev.premium||0)+parsedPremium,policies:[...(prev.policies||[]),policyToAdd]}));
-    setNewlyAddedPoliciesForAlert(prev=>[...prev,policyToAdd]);
-    setIsAddingPolicy(false);
-    setNewPolicy({planName:'',policyNo:'',cycle:'รายปี',contractDate:'',endDate:'',premium:''});
-  };
+      const myCustomers = customers.filter(c=>c.agent_id===user.id);
+      const filtered = myCustomers.filter(c=>{
+        const matchSearch=(c.name||'').toLowerCase().includes(searchTerm.toLowerCase())||(c.phone||'').includes(searchTerm);
+        let matchStatus=false;
+        if(activeTab==='ทั้งหมด') matchStatus=true;
+        else if(activeTab==='ขาดการติดต่อ'){
+          const diff=c.lastContact?Math.ceil((new Date()-new Date(c.lastContact))/(1000*60*60*24)):0;
+          matchStatus=diff>30&&c.status!=='ปิดการขาย';
+        } else matchStatus=c.status===activeTab;
+        return matchSearch&&matchStatus;
+      });
 
-  const handleAddCareNote = () => {
-    if(!newCareNote.trim()) return alert("กรุณากรอกรายละเอียดการติดต่อ");
-    const newHistory=[...(formData.careHistory||[]),{date:getTodayStr(),note:newCareNote.trim()}];
-    setFormData(prev=>({...prev,careHistory:newHistory,lastContact:getTodayStr()}));
-    setNewCareNote('');
-  };
-
-  const generateAiInsight = () => {
-    setIsAiLoading(true);
-    setTimeout(()=>{
-      let insight="";
-      if(formData.status==='ปิดการขาย') insight=`AI (Aftercare): ลูกค้าปิดการขายแผน ${formData.interestedPlan} ไปแล้ว แนะนำให้รักษาสัมพันธ์และนำเสนอแผนควบการลงทุนเพิ่มเติมในปีหน้า`;
-      else if(formData.status==='นัดหมาย') insight=`AI (Closing Strategy): ลูกค้ามีรายได้ ${formData.income} และสนใจแผน ${formData.interestedPlan} มีโอกาสปิดการขาย 85% เตรียมข้อมูลเรื่องภาษีไปนำเสนอเพิ่มเติม`;
-      else insight=`AI วิเคราะห์: ลูกค้ามีสถานะ ${formData.status} แนะนำให้ส่งบทความสั้นๆ ทาง Line (${formData.lineId||'เบอร์โทร'}) ก่อนโทรคุย`;
-      setAiInsight(insight); setIsAiLoading(false);
-    },1500);
-  };
-
-  return (
-    <>
-      <Lightbox src={lightboxSrc} onClose={()=>setLightboxSrc(null)}/>
-      <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-2 sm:p-6">
-        <div className="bg-white rounded-[2rem] lg:rounded-[3rem] shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col overflow-hidden fade-up">
-          <div className="px-6 lg:px-10 py-4 lg:py-6 border-b border-slate-100 flex justify-between items-center bg-white z-10">
-            <div><h2 className="text-2xl lg:text-3xl font-black text-slate-800">{formData.name}</h2><p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-0.5">จัดการข้อมูลและอัปเดตสถานะการขาย</p></div>
-            <button onClick={onClose} className="text-slate-400 hover:bg-slate-100 p-3 rounded-2xl transition"><Icon name="x" size={22}/></button>
+      return (
+        <div className="space-y-6 lg:space-y-8 fade-up">
+          <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-2">
+            <div>
+              <h2 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={36}/> ฐานข้อมูลลูกค้า</h2>
+              <p className="text-slate-500 font-bold mt-1 uppercase tracking-widest text-xs">ค้นหา กรอง และจัดการข้อมูลลูกค้าในมือคุณ</p>
+            </div>
+            <div className="flex gap-3 w-full md:w-auto">
+              <div className="relative flex-1 md:w-72"><Icon name="magnifying-glass" className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-12 pr-5 py-3 border-2 border-slate-200 rounded-2xl focus:border-blue-500 outline-none shadow-sm font-black text-sm"/></div>
+              <button onClick={()=>exportToCSV(filtered,`Customers_${user.name}.csv`)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 px-4 py-3 rounded-2xl font-black shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap" title="Export CSV"><Icon name="file-csv" size={20}/><span className="hidden sm:inline text-sm">Export</span></button>
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 lg:p-10 space-y-8 custom-scrollbar bg-slate-50/50">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-              <div className="lg:col-span-2 space-y-8">
-                {/* QUICK STATUS */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 bg-white p-5 lg:p-8 rounded-[1.5rem] border border-slate-100 shadow-sm">
-                  <div className="space-y-2 col-span-2 lg:col-span-1"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ปรับสถานะ</label><select name="status" value={formData.status} onChange={handleChange} className="w-full px-4 py-3 border-2 border-blue-200 rounded-2xl bg-blue-50 font-black text-blue-800 outline-none">{STATUS_LIST.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
-                  <div className="space-y-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ยอดขายรวม</label><input type="number" name="premium" value={formData.premium} onChange={handleChange} className="w-full px-4 py-3 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-800"/></div>
-                  <div className="space-y-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">วันนัดหมาย</label><input type="date" name="appointmentDate" value={formData.appointmentDate} onChange={handleChange} className="w-full px-4 py-3 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-700"/></div>
-                  <div className="space-y-2">
-                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ติดต่อล่าสุด</label>
-                    <div className="flex gap-2">
-                      <input type="date" name="lastContact" value={formData.lastContact||''} onChange={handleChange} className="w-full px-3 py-3 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-700 text-sm"/>
-                      <button type="button" onClick={()=>setFormData(prev=>({...prev,lastContact:getTodayStr()}))} className="bg-blue-50 border-2 border-blue-100 text-blue-600 px-3 rounded-2xl font-black hover:bg-blue-100 transition" title="วันนี้"><Icon name="arrows-clockwise" size={18}/></button>
-                    </div>
+          <div className="flex overflow-x-auto custom-scrollbar gap-2 pb-3">
+            {['ทั้งหมด',...STATUS_LIST,'ขาดการติดต่อ'].map(tab=>{
+              let count=0;
+              if(tab==='ทั้งหมด') count=myCustomers.length;
+              else if(tab==='ขาดการติดต่อ') count=myCustomers.filter(c=>{const diff=c.lastContact?Math.ceil((new Date()-new Date(c.lastContact))/(1000*60*60*24)):0;return diff>30&&c.status!=='ปิดการขาย';}).length;
+              else count=myCustomers.filter(c=>c.status===tab).length;
+              return (
+                <button key={tab} onClick={()=>setActiveTab(tab)} className={`px-5 py-3 rounded-2xl font-black whitespace-nowrap transition-all border-2 text-sm ${activeTab===tab?(tab==='ขาดการติดต่อ'?'bg-red-500 text-white border-red-500 shadow-xl transform -translate-y-1':'dow-accent text-white border-transparent shadow-xl transform -translate-y-1'):'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                  {tab} <span className={`ml-2 px-2.5 py-0.5 rounded-lg text-xs font-black ${activeTab===tab?'bg-white/20 text-white':'bg-slate-100 text-slate-500'}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-8">
+            {filtered.map((c,ci)=>(
+              <div key={c.id} className={`bg-white rounded-[2rem] p-6 lg:p-8 border-2 border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all relative overflow-hidden group fade-up`} style={{animationDelay:`${ci*0.04}s`}}>
+                <div className={`absolute top-0 right-0 w-20 h-20 rounded-bl-full -mr-3 -mt-3 opacity-20 ${c.status==='ปิดการขาย'?'bg-emerald-500':c.status==='ลีดใหม่'?'bg-blue-500':'bg-orange-500'}`}></div>
+                <div className="flex justify-between items-start mb-5 relative z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors text-lg">{(c.name||'?').charAt(0)}</div>
+                    <div><h3 className="font-black text-lg text-slate-800">{c.name}</h3><p className="text-sm text-slate-500 flex items-center gap-1.5 mt-0.5 font-bold"><Icon name="phone" size={12}/>{c.phone}</p></div>
                   </div>
                 </div>
-
-                {/* EDITABLE DETAILS */}
-                <div className="bg-white rounded-[1.5rem] p-5 lg:p-8 border border-slate-100 shadow-sm">
-                  <h3 className="font-black text-slate-800 mb-5 text-xl border-b-2 border-slate-100 pb-3 flex items-center gap-3"><Icon name="user" size={24} className="text-blue-500"/> ข้อมูลรายละเอียดลูกค้า</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">ชื่อ-นามสกุล</label><input type="text" name="name" value={formData.name||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">เบอร์โทร</label><input type="text" name="phone" value={formData.phone||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">Line ID</label><input type="text" name="lineId" value={formData.lineId||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">เพศ</label><select name="gender" value={formData.gender||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"><option value="Male">ชาย</option><option value="Female">หญิง</option></select></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">วันเกิด (ค.ศ.)</label><input type="date" name="dob" value={formData.dob||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">อายุ (ปี)</label><input type="number" name="age" value={formData.age||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">อาชีพ</label><input type="text" name="occupation" value={formData.occupation||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">รายได้ต่อเดือน</label><select name="income" value={formData.income||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"><option>ต่ำกว่า 15,000</option><option>15,000 - 30,000</option><option>30,000 - 50,000</option><option>50,000 - 100,000</option><option>100,000+</option></select></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={formData.interestedPlan||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black text-blue-600"/></div>
-                    <div className="space-y-1"><label className="block text-xs font-black text-slate-400">แหล่งที่มา</label><select name="leadSource" value={formData.leadSource||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black">{leadSources.map(s=><option key={s}>{s}</option>)}</select></div>
-                    <div className="lg:col-span-3 space-y-1"><label className="block text-xs font-black text-slate-400">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note||''} onChange={handleChange} rows={3} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-bold" placeholder="บันทึกข้อมูลสำคัญ..."/></div>
-                  </div>
-                  <div className="mt-6 space-y-4 border-t-2 border-slate-100 pt-5">
-                    <label className="flex items-center gap-4 bg-purple-50 p-5 rounded-2xl border-2 border-purple-200 cursor-pointer shadow-inner">
-                      <input type="checkbox" name="hasOldPolicy" checked={formData.hasOldPolicy||false} onChange={handleChange} className="w-5 h-5 text-purple-600 rounded-lg"/>
-                      <span className="font-black text-purple-900">ลูกค้ามีประกันเดิมอยู่แล้ว</span>
-                    </label>
-                    {formData.hasOldPolicy && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-5 rounded-3xl border-2 border-slate-200 shadow-sm">
-                        <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เบี้ยประกันเดิม (ต่อปี)</label><input type="number" name="oldPremium" value={formData.oldPremium||''} onChange={handleChange} className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl outline-none font-black"/></div>
-                        <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">รายละเอียดกรมธรรม์เดิม</label><input type="text" name="oldPolicyDetails" value={formData.oldPolicyDetails||''} onChange={handleChange} placeholder="เช่น สุขภาพเหมาจ่าย AIA" className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl outline-none font-black"/></div>
-                      </div>
-                    )}
-                  </div>
+                <div className="mb-5"><span className={`inline-block px-3 py-1 rounded-xl text-xs font-black border-2 uppercase tracking-widest ${c.status==='ปิดการขาย'?'bg-emerald-50 border-emerald-200 text-emerald-700':c.status==='ลีดใหม่'?'bg-blue-50 border-blue-200 text-blue-700':c.status==='เสนอแบบ'?'bg-purple-50 border-purple-200 text-purple-700':'bg-orange-50 border-orange-200 text-orange-700'}`}>{c.status}</span></div>
+                <div className="space-y-2 mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="flex justify-between text-sm border-b border-slate-200 pb-2"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">นัดล่าสุด</span><span className="font-black text-slate-800 text-sm">{c.appointmentDate?toBuddhistYear(c.appointmentDate):'-'}</span></div>
+                  <div className="flex justify-between text-sm border-b border-slate-200 pb-2"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">AI Score</span><span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-600 text-base">{c.ai_score||0}/100</span></div>
+                  <div className="flex justify-between text-sm items-center"><span className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">แผนที่สนใจ</span><span className="font-black text-blue-600 truncate max-w-[130px] text-right text-sm">{c.interestedPlan||'-'}</span></div>
                 </div>
+                <button onClick={()=>setSelectedCustomer(c)} className="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-black rounded-2xl transition border-2 border-slate-200 hover:border-blue-300 flex items-center justify-center gap-2 text-sm">ดู / แก้ไขข้อมูล <Icon name="caret-right" size={16}/></button>
+              </div>
+            ))}
+            {filtered.length===0 && <div className="col-span-full bg-white p-16 rounded-[3rem] text-center border-2 border-slate-100"><Icon name="database" size={64} className="mx-auto text-slate-200 mb-5"/><h3 className="text-2xl font-black text-slate-600">ไม่พบข้อมูลลูกค้า</h3></div>}
+          </div>
 
-                {/* MULTI-CATEGORY IMAGE ATTACHMENTS */}
-                <div className="bg-amber-50/60 rounded-[1.5rem] p-5 lg:p-8 border-2 border-amber-200">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-black text-amber-800 text-xl flex items-center gap-3"><Icon name="folder-open" size={26}/> แนบเอกสาร/ภาพ (หลายประเภท)</h3>
-                    <button type="button" onClick={()=>fileInputRef.current?.click()} className="px-4 py-2.5 bg-amber-500 text-white font-black rounded-xl hover:bg-amber-600 transition flex items-center gap-2 shadow-md text-sm"><Icon name="upload-simple" size={16}/> อัปโหลด</button>
-                  </div>
-                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden"/>
-                  <div className="flex overflow-x-auto gap-2 pb-2 mb-4">
-                    {ATTACH_CATEGORIES.map(cat => {
-                      const count = getAttachByCategory(cat.key).length;
-                      return (
-                        <button key={cat.key} onClick={()=>setActiveAttachCategory(cat.key)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs whitespace-nowrap border-2 transition-all ${activeAttachCategory===cat.key?`${cat.bg} ${cat.border} ${cat.color} shadow-sm`:'bg-white border-slate-200 text-slate-500'}`}>
-                          <Icon name={cat.icon} size={14}/>{cat.label}
-                          {count > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${activeAttachCategory===cat.key?'bg-white text-slate-700':'bg-slate-100'}`}>{count}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {(() => {
-                    const catFiles = getAttachByCategory(activeAttachCategory);
-                    const catInfo = ATTACH_CATEGORIES.find(c => c.key === activeAttachCategory);
-                    if (catFiles.length === 0) return (
-                      <div className={`border-2 border-dashed ${catInfo.border} rounded-2xl p-8 text-center cursor-pointer hover:opacity-80 transition`} onClick={()=>fileInputRef.current?.click()}>
-                        <Icon name={catInfo.icon} size={40} className={`mx-auto ${catInfo.color} mb-2 opacity-50`}/>
-                        <p className={`${catInfo.color} font-bold text-sm`}>คลิกเพื่ออัปโหลด{catInfo.label}</p>
-                      </div>
-                    );
-                    const globalIndexes = (formData.attachments||[]).map((a, gi) => ({a, gi})).filter(({a}) => a.category === activeAttachCategory || (!a.category && activeAttachCategory === 'general'));
-                    return (
-                      <div className="flex flex-wrap gap-3">
-                        {globalIndexes.map(({a, gi}) => (
-                          <div key={gi} className="relative group">
-                            <img src={a.data} alt={a.name} className="attach-thumb" onClick={()=>setLightboxSrc(a.data)}/>
-                            <button onClick={()=>removeAttachment(gi)} className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs font-black opacity-0 group-hover:opacity-100 transition flex items-center justify-center">✕</button>
-                            <p className="text-[10px] text-slate-500 text-center mt-1 max-w-[80px] truncate font-bold">{a.date}</p>
-                          </div>
-                        ))}
-                        <div onClick={()=>fileInputRef.current?.click()} className={`w-20 h-20 rounded-2xl border-2 border-dashed ${catInfo.border} flex items-center justify-center cursor-pointer hover:opacity-80 transition ${catInfo.color}`}><Icon name="plus" size={22}/></div>
-                      </div>
-                    );
-                  })()}
-                </div>
+          {selectedCustomer && <CustomerModal customer={selectedCustomer} onClose={()=>setSelectedCustomer(null)} onSave={updateCustomer} onDelete={deleteCustomer}/>}
+        </div>
+      );
+    }
 
-                {/* CARE HISTORY */}
-                <div className="bg-blue-50/50 rounded-[1.5rem] p-5 lg:p-8 border-2 border-blue-100 shadow-inner">
-                  <h3 className="font-black text-blue-800 mb-5 text-xl flex items-center gap-3"><Icon name="chats-circle" size={28}/> บันทึกการติดต่อ & ดูแลลูกค้า</h3>
-                  <div className="flex flex-col sm:flex-row gap-3 mb-5">
-                    <input type="text" value={newCareNote} onChange={e=>setNewCareNote(e.target.value)} placeholder="รายละเอียดการพูดคุย..." className="flex-1 px-5 py-4 border-2 border-blue-200 rounded-2xl outline-none font-bold text-slate-700 bg-white focus:border-blue-400"
-                      onKeyDown={e=>{if(e.key==='Enter'&&newCareNote.trim())handleAddCareNote();}}/>
-                    <button type="button" onClick={handleAddCareNote} className="px-6 py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-lg"><Icon name="plus" size={18}/> เพิ่ม</button>
-                  </div>
-                  <div className="space-y-3 max-h-56 overflow-y-auto custom-scrollbar pr-1">
-                    {(!formData.careHistory||formData.careHistory.length===0) ? (
-                      <div className="bg-white p-5 rounded-2xl text-center border-2 border-blue-100 border-dashed"><p className="text-blue-500 font-bold text-sm">ยังไม่มีประวัติการติดต่อ</p></div>
-                    ) : (
-                      [...formData.careHistory].reverse().map((h,i)=>(
-                        <div key={i} className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                          <div className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap"><Icon name="calendar" className="inline mr-1" size={12}/>{toBuddhistYear(h.date)}</div>
-                          <div className="font-bold text-slate-700 text-sm leading-relaxed">{h.note}</div>
+    // ============================================================================
+    // CUSTOMER MODAL
+    // ============================================================================
+    function CustomerModal({ customer, onClose, onSave, onDelete }) {
+      const [formData, setFormData] = useState({...customer});
+      const [isAddingPolicy, setIsAddingPolicy] = useState(false);
+      const [newPolicy, setNewPolicy] = useState({planName:'',policyNo:'',cycle:'รายปี',contractDate:'',endDate:'',premium:''});
+      const [isAiLoading, setIsAiLoading] = useState(false);
+      const [aiInsight, setAiInsight] = useState(null);
+      const [deleteConfirm, setDeleteConfirm] = useState(false);
+      const [newlyAddedPoliciesForAlert, setNewlyAddedPoliciesForAlert] = useState([]);
+      const [newCareNote, setNewCareNote] = useState('');
+      const [lightboxSrc, setLightboxSrc] = useState(null);
+      const [activeAttachCategory, setActiveAttachCategory] = useState('general');
+      const fileInputRef = useRef(null);
+      const [leadSources] = useState(getLeadSources());
+
+      const ATTACH_CATEGORIES = [
+        { key: 'general',    label: 'ทั่วไป',        icon: 'image',        color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200' },
+        { key: 'id_card',    label: 'บัตรประชาชน',   icon: 'identification-card', color: 'text-blue-600', bg: 'bg-blue-50',   border: 'border-blue-200' },
+        { key: 'policy_doc', label: 'กรมธรรม์',      icon: 'file-text',    color: 'text-emerald-600',bg: 'bg-emerald-50', border: 'border-emerald-200'},
+        { key: 'health',     label: 'ผลตรวจสุขภาพ', icon: 'heart',        color: 'text-red-600',    bg: 'bg-red-50',    border: 'border-red-200' },
+        { key: 'finance',    label: 'เอกสารการเงิน', icon: 'money',        color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
+      ];
+
+      const handleChange = (e) => {
+        const {name,value,type,checked}=e.target;
+        const newVal=type==='checkbox'?checked:value;
+        if(name==='dob') setFormData(prev=>({...prev,[name]:newVal,age:calculateAge(newVal)}));
+        else setFormData(prev=>({...prev,[name]:newVal}));
+      };
+
+      const handleSave = () => {
+        if(formData.status==='ปิดการขาย'&&customer.status!=='ปิดการขาย') formData.closedDate=getTodayStr();
+        if(!formData.lastContact) formData.lastContact=getTodayStr();
+        onSave(formData, newlyAddedPoliciesForAlert); onClose();
+      };
+
+      const handleImageUpload = async (e) => {
+        const files = Array.from(e.target.files);
+        const newAttachments = [];
+        for(const file of files){
+          if(!file.type.startsWith('image/')) continue;
+          const b64 = await toBase64(file);
+          newAttachments.push({ name: file.name, data: b64, date: getTodayStr(), category: activeAttachCategory, size: file.size });
+        }
+        setFormData(prev => ({ ...prev, attachments: [...(prev.attachments||[]), ...newAttachments] }));
+      };
+
+      const removeAttachment = (idx) => { setFormData(prev=>({...prev,attachments:(prev.attachments||[]).filter((_,i)=>i!==idx)})); };
+      const getAttachByCategory = (cat) => (formData.attachments||[]).filter(a => a.category === cat || (!a.category && cat === 'general'));
+
+      const handleAddPolicy = () => {
+        if(!newPolicy.planName||!newPolicy.contractDate) return alert("กรุณากรอกชื่อแผนและวันทำสัญญา");
+        const parsedPremium=Number(newPolicy.premium||0);
+        const nextRenewal = getNextRenewalDate(newPolicy.contractDate, newPolicy.cycle);
+        const policyToAdd={...newPolicy,premium:parsedPremium,nextRenewal};
+        setFormData(prev=>({...prev,premium:Number(prev.premium||0)+parsedPremium,policies:[...(prev.policies||[]),policyToAdd]}));
+        setNewlyAddedPoliciesForAlert(prev=>[...prev,policyToAdd]);
+        setIsAddingPolicy(false);
+        setNewPolicy({planName:'',policyNo:'',cycle:'รายปี',contractDate:'',endDate:'',premium:''});
+      };
+
+      const handleAddCareNote = () => {
+        if(!newCareNote.trim()) return alert("กรุณากรอกรายละเอียดการติดต่อ");
+        const newHistory=[...(formData.careHistory||[]),{date:getTodayStr(),note:newCareNote.trim()}];
+        setFormData(prev=>({...prev,careHistory:newHistory,lastContact:getTodayStr()}));
+        setNewCareNote('');
+      };
+
+      const generateAiInsight = () => {
+        setIsAiLoading(true);
+        setTimeout(()=>{
+          let insight="";
+          if(formData.status==='ปิดการขาย') insight=`AI (Aftercare): ลูกค้าปิดการขายแผน ${formData.interestedPlan} ไปแล้ว แนะนำให้รักษาสัมพันธ์และนำเสนอแผนควบการลงทุนเพิ่มเติมในปีหน้า`;
+          else if(formData.status==='นัดหมาย') insight=`AI (Closing Strategy): ลูกค้ามีรายได้ ${formData.income} และสนใจแผน ${formData.interestedPlan} มีโอกาสปิดการขาย 85% เตรียมข้อมูลเรื่องภาษีไปนำเสนอเพิ่มเติม`;
+          else insight=`AI วิเคราะห์: ลูกค้ามีสถานะ ${formData.status} แนะนำให้ส่งบทความสั้นๆ ทาง Line (${formData.lineId||'เบอร์โทร'}) ก่อนโทรคุย`;
+          setAiInsight(insight); setIsAiLoading(false);
+        },1500);
+      };
+
+      return (
+        <>
+          <Lightbox src={lightboxSrc} onClose={()=>setLightboxSrc(null)}/>
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-2 sm:p-6">
+            <div className="bg-white rounded-[2rem] lg:rounded-[3rem] shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col overflow-hidden fade-up">
+              <div className="px-6 lg:px-10 py-4 lg:py-6 border-b border-slate-100 flex justify-between items-center bg-white z-10">
+                <div><h2 className="text-2xl lg:text-3xl font-black text-slate-800">{formData.name}</h2><p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-0.5">จัดการข้อมูลและอัปเดตสถานะการขาย</p></div>
+                <button onClick={onClose} className="text-slate-400 hover:bg-slate-100 p-3 rounded-2xl transition"><Icon name="x" size={22}/></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 lg:p-10 space-y-8 custom-scrollbar bg-slate-50/50">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+                  <div className="lg:col-span-2 space-y-8">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 bg-white p-5 lg:p-8 rounded-[1.5rem] border border-slate-100 shadow-sm">
+                      <div className="space-y-2 col-span-2 lg:col-span-1"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ปรับสถานะ</label><select name="status" value={formData.status} onChange={handleChange} className="w-full px-4 py-3 border-2 border-blue-200 rounded-2xl bg-blue-50 font-black text-blue-800 outline-none">{STATUS_LIST.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ยอดขายรวม</label><input type="number" name="premium" value={formData.premium} onChange={handleChange} className="w-full px-4 py-3 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-800"/></div>
+                      <div className="space-y-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest">วันนัดหมาย</label><input type="date" name="appointmentDate" value={formData.appointmentDate} onChange={handleChange} className="w-full px-4 py-3 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-700"/></div>
+                      <div className="space-y-2">
+                        <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">ติดต่อล่าสุด</label>
+                        <div className="flex gap-2">
+                          <input type="date" name="lastContact" value={formData.lastContact||''} onChange={handleChange} className="w-full px-3 py-3 border-2 border-slate-200 rounded-2xl bg-slate-50 outline-none font-black text-slate-700 text-sm"/>
+                          <button type="button" onClick={()=>setFormData(prev=>({...prev,lastContact:getTodayStr()}))} className="bg-blue-50 border-2 border-blue-100 text-blue-600 px-3 rounded-2xl font-black hover:bg-blue-100 transition" title="วันนี้"><Icon name="arrows-clockwise" size={18}/></button>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* POLICIES */}
-                {formData.status==='ปิดการขาย' && (
-                  <div className="bg-emerald-50/50 rounded-[1.5rem] p-5 lg:p-8 border-2 border-emerald-200 shadow-inner">
-                    <div className="flex justify-between items-center mb-6">
-                      <div><h3 className="font-black text-emerald-800 flex items-center gap-3 text-xl"><Icon name="shield-check" size={28}/> กรมธรรม์ที่ซื้อแล้ว</h3></div>
-                      <button onClick={()=>setIsAddingPolicy(!isAddingPolicy)} className="px-5 py-2.5 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 flex items-center gap-2 shadow-lg text-sm"><Icon name="plus" size={18}/> เพิ่มกรมธรรม์</button>
+                      </div>
                     </div>
-                    {isAddingPolicy && (
-                      <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 mb-6 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-md">
-                        <div className="md:col-span-2"><label className="text-[10px] font-black text-slate-400 mb-1 block">ชื่อแผน *</label><input type="text" value={newPolicy.planName} onChange={e=>setNewPolicy({...newPolicy,planName:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"/></div>
-                        <div><label className="text-[10px] font-black text-slate-400 mb-1 block">เลขกรมธรรม์</label><input type="text" value={newPolicy.policyNo} onChange={e=>setNewPolicy({...newPolicy,policyNo:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"/></div>
-                        <div><label className="text-[10px] font-black text-slate-400 mb-1 block">รอบชำระ</label><select value={newPolicy.cycle} onChange={e=>setNewPolicy({...newPolicy,cycle:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"><option value="รายเดือน">รายเดือน</option><option value="ราย 3 เดือน">ราย 3 เดือน</option><option value="ราย 6 เดือน">ราย 6 เดือน</option><option value="รายปี">รายปี</option></select></div>
-                        <div><label className="text-[10px] font-black text-emerald-600 mb-1 block">📅 วันทำสัญญา * (ใช้คำนวณต่ออายุ)</label><input type="date" value={newPolicy.contractDate} onChange={e=>setNewPolicy({...newPolicy,contractDate:e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black text-emerald-800"/></div>
-                        <div><label className="text-[10px] font-black text-orange-500 mb-1 block">วันสิ้นสุด/หมดอายุ (ถ้ามี)</label><input type="date" value={newPolicy.endDate} onChange={e=>setNewPolicy({...newPolicy,endDate:e.target.value})} className="w-full border-2 border-orange-200 bg-orange-50 rounded-xl px-4 py-2 font-black text-orange-800"/></div>
-                        <div className="md:col-span-2"><label className="text-[10px] font-black text-emerald-600 mb-1 block">ค่าเบี้ย (ต่อรอบชำระ)</label><input type="number" value={newPolicy.premium} onChange={e=>setNewPolicy({...newPolicy,premium:e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black text-emerald-800"/></div>
-                        <button onClick={handleAddPolicy} className="md:col-span-2 py-3 bg-emerald-500 text-white rounded-xl font-black mt-1 hover:bg-emerald-600 transition shadow-lg">💾 บันทึกข้อมูลกรมธรรม์</button>
+
+                    <div className="bg-white rounded-[1.5rem] p-5 lg:p-8 border border-slate-100 shadow-sm">
+                      <h3 className="font-black text-slate-800 mb-5 text-xl border-b-2 border-slate-100 pb-3 flex items-center gap-3"><Icon name="user" size={24} className="text-blue-500"/> ข้อมูลรายละเอียดลูกค้า</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">ชื่อ-นามสกุล</label><input type="text" name="name" value={formData.name||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">เบอร์โทร</label><input type="text" name="phone" value={formData.phone||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">Line ID</label><input type="text" name="lineId" value={formData.lineId||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">เพศ</label><select name="gender" value={formData.gender||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"><option value="Male">ชาย</option><option value="Female">หญิง</option></select></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">วันเกิด (ค.ศ.)</label><input type="date" name="dob" value={formData.dob||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">อายุ (ปี)</label><input type="number" name="age" value={formData.age||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">อาชีพ</label><input type="text" name="occupation" value={formData.occupation||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"/></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">รายได้ต่อเดือน</label><select name="income" value={formData.income||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black"><option>ต่ำกว่า 15,000</option><option>15,000 - 30,000</option><option>30,000 - 50,000</option><option>50,000 - 100,000</option><option>100,000+</option></select></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">แผนที่สนใจ</label><input type="text" name="interestedPlan" value={formData.interestedPlan||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black text-blue-600"/></div>
+                        <div className="space-y-1"><label className="block text-xs font-black text-slate-400">แหล่งที่มา</label><select name="leadSource" value={formData.leadSource||''} onChange={handleChange} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-black">{leadSources.map(s=><option key={s}>{s}</option>)}</select></div>
+                        <div className="lg:col-span-3 space-y-1"><label className="block text-xs font-black text-slate-400">หมายเหตุเพิ่มเติม</label><textarea name="note" value={formData.note||''} onChange={handleChange} rows={3} className="w-full px-4 py-3 border-2 rounded-xl bg-slate-50 font-bold" placeholder="บันทึกข้อมูลสำคัญ..."/></div>
                       </div>
-                    )}
-                    {(!formData.policies||formData.policies.length===0) ? (
-                      <div className="bg-white p-6 rounded-3xl text-center border-2 border-emerald-100 border-dashed"><p className="text-emerald-600 font-black">ยังไม่มีข้อมูลกรมธรรม์</p></div>
-                    ) : (
-                      <div className="space-y-3">
-                        {formData.policies.map((p,i)=>(
-                          <div key={i} className="bg-white p-5 rounded-[1.5rem] border-2 border-emerald-100 shadow-sm">
-                            <div className="flex flex-wrap justify-between items-start gap-3">
-                              <div>
-                                <p className="font-black text-lg text-slate-800">{p.planName}</p>
-                                <p className="text-xs font-black text-slate-400 mt-1 uppercase tracking-widest">เลข: {p.policyNo||'-'} | รอบ: {p.cycle} | เบี้ย: <span className="text-emerald-600">{formatCurrency(p.premium)}</span></p>
-                              </div>
-                              <div className="flex gap-2 flex-wrap">
-                                {p.contractDate && <div className="text-right bg-emerald-50 px-4 py-2.5 rounded-2xl border border-emerald-100"><p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">วันทำสัญญา</p><p className="font-black text-emerald-700 text-sm">{toBuddhistYear(p.contractDate)}</p></div>}
-                                <div className="text-right bg-orange-50 px-4 py-2.5 rounded-2xl border border-orange-100"><p className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-0.5">📅 ต่ออายุถัดไป</p><p className="font-black text-orange-700">{p.nextRenewal?toBuddhistYear(p.nextRenewal):toBuddhistYear(p.endDate)}</p></div>
-                              </div>
-                            </div>
+                      <div className="mt-6 space-y-4 border-t-2 border-slate-100 pt-5">
+                        <label className="flex items-center gap-4 bg-purple-50 p-5 rounded-2xl border-2 border-purple-200 cursor-pointer shadow-inner">
+                          <input type="checkbox" name="hasOldPolicy" checked={formData.hasOldPolicy||false} onChange={handleChange} className="w-5 h-5 text-purple-600 rounded-lg"/>
+                          <span className="font-black text-purple-900">ลูกค้ามีประกันเดิมอยู่แล้ว</span>
+                        </label>
+                        {formData.hasOldPolicy && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-5 rounded-3xl border-2 border-slate-200 shadow-sm">
+                            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เบี้ยประกันเดิม (ต่อปี)</label><input type="number" name="oldPremium" value={formData.oldPremium||''} onChange={handleChange} className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl outline-none font-black"/></div>
+                            <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">รายละเอียดกรมธรรม์เดิม</label><input type="text" name="oldPolicyDetails" value={formData.oldPolicyDetails||''} onChange={handleChange} placeholder="เช่น สุขภาพเหมาจ่าย AIA" className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl outline-none font-black"/></div>
                           </div>
-                        ))}
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-amber-50/60 rounded-[1.5rem] p-5 lg:p-8 border-2 border-amber-200">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-black text-amber-800 text-xl flex items-center gap-3"><Icon name="folder-open" size={26}/> แนบเอกสาร/ภาพ (หลายประเภท)</h3>
+                        <button type="button" onClick={()=>fileInputRef.current?.click()} className="px-4 py-2.5 bg-amber-500 text-white font-black rounded-xl hover:bg-amber-600 transition flex items-center gap-2 shadow-md text-sm"><Icon name="upload-simple" size={16}/> อัปโหลด</button>
+                      </div>
+                      <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden"/>
+                      <div className="flex overflow-x-auto gap-2 pb-2 mb-4">
+                        {ATTACH_CATEGORIES.map(cat => {
+                          const count = getAttachByCategory(cat.key).length;
+                          return (
+                            <button key={cat.key} onClick={()=>setActiveAttachCategory(cat.key)}
+                              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs whitespace-nowrap border-2 transition-all ${activeAttachCategory===cat.key?`${cat.bg} ${cat.border} ${cat.color} shadow-sm`:'bg-white border-slate-200 text-slate-500'}`}>
+                              <Icon name={cat.icon} size={14}/>{cat.label}
+                              {count > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${activeAttachCategory===cat.key?'bg-white text-slate-700':'bg-slate-100'}`}>{count}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {(() => {
+                        const catFiles = getAttachByCategory(activeAttachCategory);
+                        const catInfo = ATTACH_CATEGORIES.find(c => c.key === activeAttachCategory);
+                        if (catFiles.length === 0) return (
+                          <div className={`border-2 border-dashed ${catInfo.border} rounded-2xl p-8 text-center cursor-pointer hover:opacity-80 transition`} onClick={()=>fileInputRef.current?.click()}>
+                            <Icon name={catInfo.icon} size={40} className={`mx-auto ${catInfo.color} mb-2 opacity-50`}/>
+                            <p className={`${catInfo.color} font-bold text-sm`}>คลิกเพื่ออัปโหลด{catInfo.label}</p>
+                          </div>
+                        );
+                        const globalIndexes = (formData.attachments||[]).map((a, gi) => ({a, gi})).filter(({a}) => a.category === activeAttachCategory || (!a.category && activeAttachCategory === 'general'));
+                        return (
+                          <div className="flex flex-wrap gap-3">
+                            {globalIndexes.map(({a, gi}) => (
+                              <div key={gi} className="relative group">
+                                <img src={a.data} alt={a.name} className="attach-thumb" onClick={()=>setLightboxSrc(a.data)}/>
+                                <button onClick={()=>removeAttachment(gi)} className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs font-black opacity-0 group-hover:opacity-100 transition flex items-center justify-center">✕</button>
+                                <p className="text-[10px] text-slate-500 text-center mt-1 max-w-[80px] truncate font-bold">{a.date}</p>
+                              </div>
+                            ))}
+                            <div onClick={()=>fileInputRef.current?.click()} className={`w-20 h-20 rounded-2xl border-2 border-dashed ${catInfo.border} flex items-center justify-center cursor-pointer hover:opacity-80 transition ${catInfo.color}`}><Icon name="plus" size={22}/></div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <div className="bg-blue-50/50 rounded-[1.5rem] p-5 lg:p-8 border-2 border-blue-100 shadow-inner">
+                      <h3 className="font-black text-blue-800 mb-5 text-xl flex items-center gap-3"><Icon name="chats-circle" size={28}/> บันทึกการติดต่อ & ดูแลลูกค้า</h3>
+                      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                        <input type="text" value={newCareNote} onChange={e=>setNewCareNote(e.target.value)} placeholder="รายละเอียดการพูดคุย..." className="flex-1 px-5 py-4 border-2 border-blue-200 rounded-2xl outline-none font-bold text-slate-700 bg-white focus:border-blue-400"
+                          onKeyDown={e=>{if(e.key==='Enter'&&newCareNote.trim())handleAddCareNote();}}/>
+                        <button type="button" onClick={handleAddCareNote} className="px-6 py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-lg"><Icon name="plus" size={18}/> เพิ่ม</button>
+                      </div>
+                      <div className="space-y-3 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                        {(!formData.careHistory||formData.careHistory.length===0) ? (
+                          <div className="bg-white p-5 rounded-2xl text-center border-2 border-blue-100 border-dashed"><p className="text-blue-500 font-bold text-sm">ยังไม่มีประวัติการติดต่อ</p></div>
+                        ) : (
+                          [...formData.careHistory].reverse().map((h,i)=>(
+                            <div key={i} className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                              <div className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap"><Icon name="calendar" className="inline mr-1" size={12}/>{toBuddhistYear(h.date)}</div>
+                              <div className="font-bold text-slate-700 text-sm leading-relaxed">{h.note}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {formData.status==='ปิดการขาย' && (
+                      <div className="bg-emerald-50/50 rounded-[1.5rem] p-5 lg:p-8 border-2 border-emerald-200 shadow-inner">
+                        <div className="flex justify-between items-center mb-6">
+                          <div><h3 className="font-black text-emerald-800 flex items-center gap-3 text-xl"><Icon name="shield-check" size={28}/> กรมธรรม์ที่ซื้อแล้ว</h3></div>
+                          <button onClick={()=>setIsAddingPolicy(!isAddingPolicy)} className="px-5 py-2.5 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 flex items-center gap-2 shadow-lg text-sm"><Icon name="plus" size={18}/> เพิ่มกรมธรรม์</button>
+                        </div>
+                        {isAddingPolicy && (
+                          <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 mb-6 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-md">
+                            <div className="md:col-span-2"><label className="text-[10px] font-black text-slate-400 mb-1 block">ชื่อแผน *</label><input type="text" value={newPolicy.planName} onChange={e=>setNewPolicy({...newPolicy,planName:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"/></div>
+                            <div><label className="text-[10px] font-black text-slate-400 mb-1 block">เลขกรมธรรม์</label><input type="text" value={newPolicy.policyNo} onChange={e=>setNewPolicy({...newPolicy,policyNo:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"/></div>
+                            <div><label className="text-[10px] font-black text-slate-400 mb-1 block">รอบชำระ</label><select value={newPolicy.cycle} onChange={e=>setNewPolicy({...newPolicy,cycle:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"><option value="รายเดือน">รายเดือน</option><option value="ราย 3 เดือน">ราย 3 เดือน</option><option value="ราย 6 เดือน">ราย 6 เดือน</option><option value="รายปี">รายปี</option></select></div>
+                            <div><label className="text-[10px] font-black text-emerald-600 mb-1 block">📅 วันทำสัญญา * (ใช้คำนวณต่ออายุ)</label><input type="date" value={newPolicy.contractDate} onChange={e=>setNewPolicy({...newPolicy,contractDate:e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black text-emerald-800"/></div>
+                            <div><label className="text-[10px] font-black text-orange-500 mb-1 block">วันสิ้นสุด/หมดอายุ (ถ้ามี)</label><input type="date" value={newPolicy.endDate} onChange={e=>setNewPolicy({...newPolicy,endDate:e.target.value})} className="w-full border-2 border-orange-200 bg-orange-50 rounded-xl px-4 py-2 font-black text-orange-800"/></div>
+                            <div className="md:col-span-2"><label className="text-[10px] font-black text-emerald-600 mb-1 block">ค่าเบี้ย (ต่อรอบชำระ)</label><input type="number" value={newPolicy.premium} onChange={e=>setNewPolicy({...newPolicy,premium:e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black text-emerald-800"/></div>
+                            <button onClick={handleAddPolicy} className="md:col-span-2 py-3 bg-emerald-500 text-white rounded-xl font-black mt-1 hover:bg-emerald-600 transition shadow-lg">💾 บันทึกข้อมูลกรมธรรม์</button>
+                          </div>
+                        )}
+                        {(!formData.policies||formData.policies.length===0) ? (
+                          <div className="bg-white p-6 rounded-3xl text-center border-2 border-emerald-100 border-dashed"><p className="text-emerald-600 font-black">ยังไม่มีข้อมูลกรมธรรม์</p></div>
+                        ) : (
+                          <div className="space-y-3">
+                            {formData.policies.map((p,i)=>(
+                              <div key={i} className="bg-white p-5 rounded-[1.5rem] border-2 border-emerald-100 shadow-sm">
+                                <div className="flex flex-wrap justify-between items-start gap-3">
+                                  <div>
+                                    <p className="font-black text-lg text-slate-800">{p.planName}</p>
+                                    <p className="text-xs font-black text-slate-400 mt-1 uppercase tracking-widest">เลข: {p.policyNo||'-'} | รอบ: {p.cycle} | เบี้ย: <span className="text-emerald-600">{formatCurrency(p.premium)}</span></p>
+                                  </div>
+                                  <div className="flex gap-2 flex-wrap">
+                                    {p.contractDate && <div className="text-right bg-emerald-50 px-4 py-2.5 rounded-2xl border border-emerald-100"><p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">วันทำสัญญา</p><p className="font-black text-emerald-700 text-sm">{toBuddhistYear(p.contractDate)}</p></div>}
+                                    <div className="text-right bg-orange-50 px-4 py-2.5 rounded-2xl border border-orange-100"><p className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-0.5">📅 ต่ออายุถัดไป</p><p className="font-black text-orange-700">{p.nextRenewal?toBuddhistYear(p.nextRenewal):toBuddhistYear(p.endDate)}</p></div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
+
+                  <div className="lg:col-span-1">
+                    <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-[1.5rem] p-6 lg:p-8 text-white shadow-xl h-full flex flex-col relative overflow-hidden">
+                      <Icon name="sparkle" className="absolute top-4 right-4 text-indigo-400 opacity-50" size={56}/>
+                      <h3 className="font-black text-lg flex items-center gap-3 mb-5 z-10"><Icon name="brain" size={24}/> AI วิเคราะห์แนะนำ</h3>
+                      <div className="flex-1 bg-white/10 rounded-2xl p-5 z-10 flex flex-col justify-center">
+                        {aiInsight?<p className="text-indigo-50 font-bold leading-relaxed text-sm">{aiInsight}</p>:<div className="text-center"><Icon name="brain" size={40} className="mx-auto mb-3 text-indigo-300 opacity-50"/><p className="text-indigo-200 font-semibold text-sm">กดวิเคราะห์ข้อมูล</p></div>}
+                      </div>
+                      <button onClick={generateAiInsight} disabled={isAiLoading} className="w-full mt-5 bg-indigo-500 hover:bg-indigo-400 text-white font-black py-4 rounded-xl shadow-lg transition z-10 text-sm">{isAiLoading?'กำลังประมวลผล...':'วิเคราะห์ข้อมูลลูกค้าทันที'}</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-4 lg:px-10 py-4 lg:py-6 border-t border-slate-100 bg-white flex justify-between z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
+                {deleteConfirm ? (
+                  <div className="flex gap-2">
+                    <button onClick={()=>setDeleteConfirm(false)} className="px-5 py-3 bg-slate-100 rounded-xl font-black text-slate-600 text-sm">ยกเลิก</button>
+                    <button onClick={()=>{onDelete(customer.id);onClose();}} className="px-5 py-3 bg-red-600 rounded-xl font-black text-white shadow-lg text-sm">ยืนยันการลบ!</button>
+                  </div>
+                ) : (
+                  <button onClick={()=>setDeleteConfirm(true)} className="px-5 py-3 text-red-500 hover:bg-red-50 rounded-2xl font-black transition flex items-center gap-2 text-sm"><Icon name="trash" size={18}/> ลบข้อมูล</button>
                 )}
-              </div>
-
-              {/* AI INSIGHT PANEL */}
-              <div className="lg:col-span-1">
-                <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-[1.5rem] p-6 lg:p-8 text-white shadow-xl h-full flex flex-col relative overflow-hidden">
-                  <Icon name="sparkle" className="absolute top-4 right-4 text-indigo-400 opacity-50" size={56}/>
-                  <h3 className="font-black text-lg flex items-center gap-3 mb-5 z-10"><Icon name="brain" size={24}/> AI วิเคราะห์แนะนำ</h3>
-                  <div className="flex-1 bg-white/10 rounded-2xl p-5 z-10 flex flex-col justify-center">
-                    {aiInsight?<p className="text-indigo-50 font-bold leading-relaxed text-sm">{aiInsight}</p>:<div className="text-center"><Icon name="brain" size={40} className="mx-auto mb-3 text-indigo-300 opacity-50"/><p className="text-indigo-200 font-semibold text-sm">กดวิเคราะห์ข้อมูล</p></div>}
-                  </div>
-                  <button onClick={generateAiInsight} disabled={isAiLoading} className="w-full mt-5 bg-indigo-500 hover:bg-indigo-400 text-white font-black py-4 rounded-xl shadow-lg transition z-10 text-sm">{isAiLoading?'กำลังประมวลผล...':'วิเคราะห์ข้อมูลลูกค้าทันที'}</button>
+                <div className="flex gap-3">
+                  <button onClick={onClose} className="px-6 py-3 text-slate-500 hover:bg-slate-100 rounded-2xl font-black transition text-sm">ปิด</button>
+                  <button onClick={handleSave} className="px-8 py-3 dow-accent text-white rounded-2xl font-black hover:opacity-90 transition shadow-xl">บันทึก</button>
                 </div>
               </div>
             </div>
           </div>
+        </>
+      );
+    }
 
-          <div className="px-4 lg:px-10 py-4 lg:py-6 border-t border-slate-100 bg-white flex justify-between z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-            {deleteConfirm ? (
-              <div className="flex gap-2">
-                <button onClick={()=>setDeleteConfirm(false)} className="px-5 py-3 bg-slate-100 rounded-xl font-black text-slate-600 text-sm">ยกเลิก</button>
-                <button onClick={()=>{onDelete(customer.id);onClose();}} className="px-5 py-3 bg-red-600 rounded-xl font-black text-white shadow-lg text-sm">ยืนยันการลบ!</button>
-              </div>
-            ) : (
-              <button onClick={()=>setDeleteConfirm(true)} className="px-5 py-3 text-red-500 hover:bg-red-50 rounded-2xl font-black transition flex items-center gap-2 text-sm"><Icon name="trash" size={18}/> ลบข้อมูล</button>
-            )}
-            <div className="flex gap-3">
-              <button onClick={onClose} className="px-6 py-3 text-slate-500 hover:bg-slate-100 rounded-2xl font-black transition text-sm">ปิด</button>
-              <button onClick={handleSave} className="px-8 py-3 dow-accent text-white rounded-2xl font-black hover:opacity-90 transition shadow-xl">บันทึก</button>
-            </div>
+    // ============================================================================
+    // PIPELINE VIEW
+    // ============================================================================
+    function PipelineView({ customers }) {
+      return (
+        <div className="space-y-6 h-[calc(100vh-160px)] flex flex-col fade-up">
+          <div><h2 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="funnel" className="text-purple-500" size={36}/> Sales Pipeline</h2><p className="text-slate-500 font-bold mt-1 uppercase tracking-widest text-xs">บอร์ดสรุปขั้นตอนการขายของลูกค้าทั้งหมด</p></div>
+          <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar flex-1 items-start">
+            {STATUS_LIST.map((status,idx)=>{
+              const list=customers.filter(c=>c.status===status);
+              return (
+                <div key={status} className="bg-slate-100/70 rounded-[2rem] p-5 min-w-[300px] w-[300px] border-2 border-slate-200/50 max-h-full overflow-y-auto custom-scrollbar shadow-inner">
+                  <h3 className="font-black text-slate-700 mb-5 flex justify-between items-center text-lg">{status}<span className="bg-white px-3 py-0.5 rounded-xl text-sm shadow-sm">{list.length}</span></h3>
+                  <div className="space-y-3">
+                    {list.map(c=>(
+                      <div key={c.id} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-slate-100 border-l-8 hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1" style={{borderLeftColor:CHART_COLORS[idx%CHART_COLORS.length]}}>
+                        <p className="font-black text-lg text-slate-800">{c.name}</p>
+                        <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1.5"><Icon name="phone" size={12}/>{c.phone}</p>
+                        <div className="mt-3 pt-3 border-t border-slate-50"><p className="text-sm font-black text-slate-600 truncate">{c.interestedPlan||'รอระบุแผน'}</p>{c.premium>0&&<p className="text-sm font-black text-emerald-600 mt-1.5 bg-emerald-50 w-fit px-3 py-0.5 rounded-xl">{formatCurrency(c.premium)}</p>}</div>
+                      </div>
+                    ))}
+                    {list.length===0&&<div className="border-2 border-dashed border-slate-300 rounded-[1.5rem] p-6 text-center text-slate-400 font-black">ไม่มีข้อมูล</div>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
-    </>
-  );
-}
+      );
+    }
 
-// ============================================================================
-// PIPELINE VIEW
-// ============================================================================
-function PipelineView({ customers }) {
-  return (
-    <div className="space-y-6 h-[calc(100vh-160px)] flex flex-col fade-up">
-      <div><h2 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="funnel" className="text-purple-500" size={36}/> Sales Pipeline</h2><p className="text-slate-500 font-bold mt-1 uppercase tracking-widest text-xs">บอร์ดสรุปขั้นตอนการขายของลูกค้าทั้งหมด</p></div>
-      <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar flex-1 items-start">
-        {STATUS_LIST.map((status,idx)=>{
-          const list=customers.filter(c=>c.status===status);
-          return (
-            <div key={status} className="bg-slate-100/70 rounded-[2rem] p-5 min-w-[300px] w-[300px] border-2 border-slate-200/50 max-h-full overflow-y-auto custom-scrollbar shadow-inner">
-              <h3 className="font-black text-slate-700 mb-5 flex justify-between items-center text-lg">{status}<span className="bg-white px-3 py-0.5 rounded-xl text-sm shadow-sm">{list.length}</span></h3>
-              <div className="space-y-3">
-                {list.map(c=>(
-                  <div key={c.id} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-slate-100 border-l-8 hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1" style={{borderLeftColor:CHART_COLORS[idx%CHART_COLORS.length]}}>
-                    <p className="font-black text-lg text-slate-800">{c.name}</p>
-                    <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1.5"><Icon name="phone" size={12}/>{c.phone}</p>
-                    <div className="mt-3 pt-3 border-t border-slate-50"><p className="text-sm font-black text-slate-600 truncate">{c.interestedPlan||'รอระบุแผน'}</p>{c.premium>0&&<p className="text-sm font-black text-emerald-600 mt-1.5 bg-emerald-50 w-fit px-3 py-0.5 rounded-xl">{formatCurrency(c.premium)}</p>}</div>
-                  </div>
-                ))}
-                {list.length===0&&<div className="border-2 border-dashed border-slate-300 rounded-[1.5rem] p-6 text-center text-slate-400 font-black">ไม่มีข้อมูล</div>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// ANALYTICS VIEW
-// ============================================================================
-function AnalyticsView({ customers }) {
-  const currentMonth=new Date().getMonth(); const currentYear=new Date().getFullYear();
-  const closedThisMonth=customers.filter(c=>c.status==='ปิดการขาย'&&c.closedDate&&new Date(c.closedDate).getMonth()===currentMonth);
-  const revThisMonth=closedThisMonth.reduce((acc,c)=>acc+Number(c.premium||0),0);
-  const avgCase=closedThisMonth.length?Math.round(revThisMonth/closedThisMonth.length):0;
-  const convRate=customers.length?Math.round((customers.filter(c=>c.status==='ปิดการขาย').length/customers.length)*100):0;
-  const closedThisYear=customers.filter(c=>c.status==='ปิดการขาย'&&c.closedDate&&new Date(c.closedDate).getFullYear()===currentYear);
-  const revThisYear=closedThisYear.reduce((acc,c)=>acc+Number(c.premium||0),0);
-  const monthlyData=new Array(12).fill(0);
-  closedThisYear.forEach(c=>{monthlyData[new Date(c.closedDate).getMonth()]+=Number(c.premium||0);});
-  const bestMonthVal=Math.max(...monthlyData); const bestMonthIndex=monthlyData.indexOf(bestMonthVal);
-  const monthNames=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  const bestMonthName=bestMonthVal>0?monthNames[bestMonthIndex]:'-';
-  const prevMonthRev=currentMonth>0?monthlyData[currentMonth-1]:0;
-  let growth=0; if(prevMonthRev>0) growth=Math.round(((revThisMonth-prevMonthRev)/prevMonthRev)*100); else if(revThisMonth>0) growth=100;
-  const kpis=[
-    {title:'รายได้เดือนนี้',val:formatCurrency(revThisMonth),color:'text-emerald-600',bg:'bg-emerald-50',border:'border-emerald-100'},
-    {title:'รายได้รวมทั้งปี',val:formatCurrency(revThisYear),color:'text-indigo-600',bg:'bg-indigo-50',border:'border-indigo-100'},
-    {title:'เคสที่ปิดได้ (ด)',val:`${closedThisMonth.length} เคส`,color:'text-blue-600',bg:'bg-blue-50',border:'border-blue-100'},
-    {title:'เฉลี่ยต่อเคส (ด)',val:formatCurrency(avgCase),color:'text-purple-600',bg:'bg-purple-50',border:'border-purple-100'},
-    {title:'Conversion Rate',val:`${convRate}%`,color:'text-orange-600',bg:'bg-orange-50',border:'border-orange-100'},
-    {title:'Best Month',val:bestMonthName,color:'text-pink-600',bg:'bg-pink-50',border:'border-pink-100'},
-    {title:'Growth (YoM)',val:`${growth>0?'+'+growth:growth}%`,color:growth>=0?'text-emerald-600':'text-red-600',bg:growth>=0?'bg-emerald-50':'bg-red-50',border:growth>=0?'border-emerald-100':'border-red-100'},
-  ];
-  const chartData=STATUS_LIST.map(s=>({name:s,count:customers.filter(c=>c.status===s).length}));
-  return (
-    <div className="space-y-8 fade-up">
-      <div><h2 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="trend-up" className="text-pink-500" size={36}/> Analytics & KPI</h2><p className="text-slate-500 font-bold mt-1 uppercase tracking-widest text-xs">วิเคราะห์ผลงาน สถิติรายได้ และการเติบโตของคุณ</p></div>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
-        {kpis.map((k,i)=>(
-          <div key={i} className={`p-5 lg:p-8 rounded-[2rem] border-2 ${k.border} ${k.bg} shadow-sm hover:shadow-md transition-all transform hover:-translate-y-1 fade-up`} style={{animationDelay:`${i*0.05}s`}}>
-            <p className="text-[10px] lg:text-xs font-black text-slate-500 mb-2 uppercase tracking-widest">{k.title}</p>
-            <h3 className={`text-xl lg:text-3xl font-black ${k.color}`}>{k.val}</h3>
-          </div>
-        ))}
-      </div>
-      <div className="bg-white p-6 lg:p-10 rounded-[2.5rem] shadow-sm border border-slate-100"><h3 className="font-black text-slate-800 mb-2 text-xl">จำนวนลูกค้าในแต่ละขั้นตอน</h3><CSSBarChart data={chartData}/></div>
-    </div>
-  );
-}
-
-// ============================================================================
-// RANKING VIEW — with Member Workload Balance (from image)
-// ============================================================================
-function RankingView({ users, customers, currentUser }) {
-  const teamAgents = users.filter(u=>u.role==='agent'&&u.team===currentUser.team);
-  const ranking = teamAgents.map(u=>{
-    const rev=customers.filter(c=>c.agent_id===u.id&&c.status==='ปิดการขาย').reduce((acc,c)=>acc+Number(c.premium||0),0);
-    const taskCount=customers.filter(c=>c.agent_id===u.id&&c.status!=='ปิดการขาย').length;
-    return {...u,rev,taskCount};
-  }).sort((a,b)=>b.rev-a.rev);
-
-  const maxTaskCount = Math.max(...ranking.map(u=>u.taskCount), 1);
-
-  return (
-    <div className="max-w-4xl mx-auto space-y-8 fade-up">
-      <div className="text-center">
-        <div className="dow-accent w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-5 shadow-xl transform rotate-3"><Icon name="trophy" size={40} className="text-white"/></div>
-        <h2 className="text-3xl lg:text-4xl font-black text-slate-800">Team Ranking</h2>
-        <p className="text-slate-500 font-bold mt-1 text-sm uppercase tracking-widest bg-slate-200 inline-block px-4 py-1 rounded-full">ทีม: {currentUser.team}</p>
-      </div>
-
-      {/* MEMBER WORKLOAD BALANCE (from image) */}
-      <div className="bg-[#0d1b3e] rounded-[2rem] p-8 shadow-2xl text-white">
-        <h3 className="text-lg font-black text-indigo-200 uppercase tracking-widest mb-6 italic">Member Workload Balance</h3>
-        <div className="space-y-6">
-          {ranking.map((u, idx) => {
-            const pct = Math.round((u.taskCount / maxTaskCount) * 100);
-            return (
-              <div key={u.id}>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-black text-white uppercase tracking-wider text-sm italic">{u.name.toUpperCase()}{u.id===currentUser.id&&<span className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded-full ml-2 not-italic">คุณ</span>}</span>
-                  <span className="font-black text-indigo-300 text-sm">{u.taskCount} ภารกิจ</span>
-                </div>
-                <div className="workload-bar-track">
-                  <div className="workload-bar-fill" style={{width:`${pct}%`}}/>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Revenue Ranking */}
-      <div className="bg-white rounded-[2.5rem] shadow-xl p-8 lg:p-10">
-        <h3 className="font-black text-slate-700 text-lg mb-5 flex items-center gap-2"><Icon name="currency-dollar" size={24} className="text-yellow-500"/> อันดับยอดขาย</h3>
-        {ranking.map((u,idx)=>(
-          <div key={u.id} className={`flex items-center justify-between p-5 mb-4 rounded-3xl border-2 transition-all hover:-translate-y-1 hover:shadow-lg ${idx===0?'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200':'bg-slate-50 border-slate-100'}`}>
-            <div className="flex items-center gap-5">
-              <div className={`w-14 h-14 rounded-[1.5rem] flex items-center justify-center font-black text-xl ${idx===0?'dow-accent text-white shadow-lg':idx===1?'bg-slate-200 text-slate-500':idx===2?'bg-orange-100 text-orange-700':'bg-white border-2 border-slate-200 text-slate-400'}`}>{idx+1}</div>
-              <div><p className="font-black text-slate-800 text-xl">{u.name}{u.id===currentUser.id&&<span className="text-[10px] bg-blue-600 text-white px-2.5 py-0.5 rounded-full ml-2 shadow-sm align-middle uppercase tracking-widest">คุณ</span>}</p></div>
-            </div>
-            <h3 className={`text-2xl lg:text-3xl font-black ${idx===0?'text-orange-600':'text-slate-700'}`}>{formatCurrency(u.rev)}</h3>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// AI ASSISTANT VIEW
-// ============================================================================
-function AIAssistantView() {
-  const [inputText,setInputText]=useState('');
-  const [messages,setMessages]=useState([]);
-  const [isLoading,setIsLoading]=useState(false);
-  const messagesEndRef=useRef(null);
-  useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages,isLoading]);
-  const handleSend=async()=>{
-    if(!inputText.trim()||isLoading) return;
-    const userMsg=inputText.trim(); setInputText('');
-    setMessages(prev=>[...prev,{role:'user',text:userMsg}]); setIsLoading(true);
-    try {
-      const apiKey="AIzaSyDbHog1AJB9nmrPvQtBefDIeF-uy_y4XjU";
-      const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-      const payload={contents:[{parts:[{text:userMsg}]}],systemInstruction:{parts:[{text:"คุณคือ AI ผู้ช่วยสำหรับตัวแทนขายประกันภัยในระบบ IA CRM ให้คำแนะนำเกี่ยวกับการปิดการขาย สร้างสคริปต์การโทร ตอบข้อโต้แย้ง และวิเคราะห์ข้อมูลลูกค้า ตอบเป็นภาษาไทยด้วยความสุภาพ มืออาชีพ และกระชับเข้าใจง่าย ใช้ Markdown ในการจัดรูปแบบข้อความให้สวยงามได้"}]}};
-      const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const data=await res.json();
-      if(!res.ok) throw new Error(data.error?.message||'API Error');
-      const reply=data.candidates?.[0]?.content?.parts?.[0]?.text||'ขออภัย ไม่สามารถประมวลผลได้ในขณะนี้';
-      setMessages(prev=>[...prev,{role:'model',text:reply}]);
-    } catch {
-      setMessages(prev=>[...prev,{role:'model',text:'ขออภัย ระบบ AI ไม่สามารถตอบกลับได้ในขณะนี้'}]);
-    } finally { setIsLoading(false); }
-  };
-  const formatMessage=(text)=>({__html:text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')});
-  return (
-    <div className="max-w-4xl mx-auto space-y-6 flex flex-col h-[calc(100vh-160px)] fade-up">
-      <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 rounded-[2.5rem] p-6 lg:p-12 shadow-2xl text-white relative overflow-hidden flex flex-col flex-1 min-h-0 border border-indigo-500/20">
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
-        {messages.length===0?(
-          <div className="flex-1 flex flex-col items-center justify-center text-center relative z-10">
-            <Icon name="brain" size={64} className="mx-auto mb-6 text-indigo-300 animate-pulse drop-shadow-[0_0_15px_rgba(165,180,252,0.5)]"/>
-            <h2 className="text-3xl lg:text-5xl font-black mb-4 tracking-tight">IA AI Assistant</h2>
-            <p className="text-indigo-200 font-bold text-base max-w-xl mx-auto leading-relaxed">พิมพ์ปรึกษา AI ผู้ช่วยได้เลย!<br/>เช่น "ขอสคริปต์โทรหาลูกค้าเก่า", "วิธีตอบข้อโต้แย้งเรื่องเบี้ยแพง"</p>
-          </div>
-        ):(
-          <div className="flex-1 overflow-y-auto mb-5 pr-2 space-y-5 custom-scrollbar relative z-10">
-            {messages.map((msg,idx)=>(
-              <div key={idx} className={`flex flex-col ${msg.role==='user'?'items-end':'items-start'}`}>
-                <div className={`max-w-[85%] p-4 rounded-3xl ${msg.role==='user'?'bg-indigo-500 text-white rounded-br-sm shadow-md':'bg-white/10 text-indigo-50 rounded-bl-sm border border-white/10 backdrop-blur-md shadow-inner'}`}>
-                  {msg.role==='model'&&<Icon name="sparkle" className="text-indigo-300 mb-2" size={18}/>}
-                  <p className="whitespace-pre-wrap font-medium leading-relaxed text-sm" dangerouslySetInnerHTML={formatMessage(msg.text)}></p>
-                </div>
-              </div>
-            ))}
-            {isLoading&&(<div className="flex flex-col items-start"><div className="max-w-[85%] p-4 rounded-3xl bg-white/10 text-indigo-50 rounded-bl-sm border border-white/10 backdrop-blur-md flex items-center gap-3"><Icon name="circle-notch" className="animate-spin text-indigo-300" size={18}/><span className="font-bold text-indigo-200 text-sm">AI กำลังวิเคราะห์...</span></div></div>)}
-            <div ref={messagesEndRef}/>
-          </div>
-        )}
-        <form onSubmit={e=>{e.preventDefault();handleSend();}} className="mt-auto bg-white/10 p-3 rounded-3xl flex gap-3 backdrop-blur-xl border border-white/20 relative z-10 shadow-inner shrink-0">
-          <input type="text" value={inputText} onChange={e=>setInputText(e.target.value)} disabled={isLoading} placeholder="พิมพ์ข้อความปรึกษา AI..." className="flex-1 bg-transparent border-none text-white outline-none placeholder-indigo-300/70 font-bold px-4 py-2 text-sm"/>
-          <button type="submit" disabled={isLoading||!inputText.trim()} className="bg-indigo-500 px-6 py-2.5 rounded-2xl font-black hover:bg-indigo-400 shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm">ส่ง <Icon name="paper-plane-right"/></button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// ADMIN HOME VIEW
-// ============================================================================
-function AdminHomeView({ users, customers, showToast, pendingUsers, approveUser, rejectUser }) {
-  const agents=users.filter(u=>u.role==='agent'&&u.status==='active');
-  const closedCases=customers.filter(c=>c.status==='ปิดการขาย');
-  const totalRev=closedCases.reduce((acc,c)=>acc+Number(c.premium||0),0);
-  const testGroupTelegram=async()=>{
-    try {
-      const res=await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:TELEGRAM_CHAT_ID,text:`📢 <b>ทดสอบระบบแจ้งเตือนห้องรวม</b>\nผู้ดูแลระบบกำลังทดสอบระบบแจ้งเตือน IA CRM ฝั่ง Admin\nสถานะการเชื่อมต่อ: <b>สำเร็จ! ✅</b>`,parse_mode:"HTML"})});
-      const data=await res.json();
-      if(data.ok) showToast('ส่งแจ้งเตือนห้องรวมสำเร็จ!'); else alert(`ส่งไม่สำเร็จ: ${data.description}`);
-    } catch { alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Telegram API'); }
-  };
-  return (
-    <div className="space-y-8 fade-up">
-      {/* Pending approval banner */}
-      {pendingUsers.length > 0 && (
-        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-[2rem] p-6 fade-up">
-          <h3 className="font-black text-yellow-800 flex items-center gap-3 text-lg mb-4"><Icon name="user-circle-gear" size={24}/> มีผู้ใช้รออนุมัติ {pendingUsers.length} ราย</h3>
-          <div className="space-y-3">
-            {pendingUsers.map(u=>(
-              <div key={u.id} className="bg-white rounded-2xl p-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-black text-slate-800">{u.name}</p>
-                  <p className="text-xs text-slate-500 font-bold">{u.email} | ทีม: {u.team}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={()=>rejectUser(u)} className="px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-xl font-black text-xs hover:bg-red-100 transition">ปฏิเสธ</button>
-                  <button onClick={()=>approveUser(u)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-black text-xs hover:bg-emerald-600 transition shadow">อนุมัติ</button>
-                </div>
+    // ============================================================================
+    // ANALYTICS VIEW
+    // ============================================================================
+    function AnalyticsView({ customers }) {
+      const currentMonth=new Date().getMonth(); const currentYear=new Date().getFullYear();
+      const closedThisMonth=customers.filter(c=>c.status==='ปิดการขาย'&&c.closedDate&&new Date(c.closedDate).getMonth()===currentMonth);
+      const revThisMonth=closedThisMonth.reduce((acc,c)=>acc+Number(c.premium||0),0);
+      const avgCase=closedThisMonth.length?Math.round(revThisMonth/closedThisMonth.length):0;
+      const convRate=customers.length?Math.round((customers.filter(c=>c.status==='ปิดการขาย').length/customers.length)*100):0;
+      const closedThisYear=customers.filter(c=>c.status==='ปิดการขาย'&&c.closedDate&&new Date(c.closedDate).getFullYear()===currentYear);
+      const revThisYear=closedThisYear.reduce((acc,c)=>acc+Number(c.premium||0),0);
+      const monthlyData=new Array(12).fill(0);
+      closedThisYear.forEach(c=>{monthlyData[new Date(c.closedDate).getMonth()]+=Number(c.premium||0);});
+      const bestMonthVal=Math.max(...monthlyData); const bestMonthIndex=monthlyData.indexOf(bestMonthVal);
+      const monthNames=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      const bestMonthName=bestMonthVal>0?monthNames[bestMonthIndex]:'-';
+      const prevMonthRev=currentMonth>0?monthlyData[currentMonth-1]:0;
+      let growth=0; if(prevMonthRev>0) growth=Math.round(((revThisMonth-prevMonthRev)/prevMonthRev)*100); else if(revThisMonth>0) growth=100;
+      const kpis=[
+        {title:'รายได้เดือนนี้',val:formatCurrency(revThisMonth),color:'text-emerald-600',bg:'bg-emerald-50',border:'border-emerald-100'},
+        {title:'รายได้รวมทั้งปี',val:formatCurrency(revThisYear),color:'text-indigo-600',bg:'bg-indigo-50',border:'border-indigo-100'},
+        {title:'เคสที่ปิดได้ (ด)',val:`${closedThisMonth.length} เคส`,color:'text-blue-600',bg:'bg-blue-50',border:'border-blue-100'},
+        {title:'เฉลี่ยต่อเคส (ด)',val:formatCurrency(avgCase),color:'text-purple-600',bg:'bg-purple-50',border:'border-purple-100'},
+        {title:'Conversion Rate',val:`${convRate}%`,color:'text-orange-600',bg:'bg-orange-50',border:'border-orange-100'},
+        {title:'Best Month',val:bestMonthName,color:'text-pink-600',bg:'bg-pink-50',border:'border-pink-100'},
+        {title:'Growth (YoM)',val:`${growth>0?'+'+growth:growth}%`,color:growth>=0?'text-emerald-600':'text-red-600',bg:growth>=0?'bg-emerald-50':'bg-red-50',border:growth>=0?'border-emerald-100':'border-red-100'},
+      ];
+      const chartData=STATUS_LIST.map(s=>({name:s,count:customers.filter(c=>c.status===s).length}));
+      return (
+        <div className="space-y-8 fade-up">
+          <div><h2 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="trend-up" className="text-pink-500" size={36}/> Analytics & KPI</h2><p className="text-slate-500 font-bold mt-1 uppercase tracking-widest text-xs">วิเคราะห์ผลงาน สถิติรายได้ และการเติบโตของคุณ</p></div>
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
+            {kpis.map((k,i)=>(
+              <div key={i} className={`p-5 lg:p-8 rounded-[2rem] border-2 ${k.border} ${k.bg} shadow-sm hover:shadow-md transition-all transform hover:-translate-y-1 fade-up`} style={{animationDelay:`${i*0.05}s`}}>
+                <p className="text-[10px] lg:text-xs font-black text-slate-500 mb-2 uppercase tracking-widest">{k.title}</p>
+                <h3 className={`text-xl lg:text-3xl font-black ${k.color}`}>{k.val}</h3>
               </div>
             ))}
           </div>
+          <div className="bg-white p-6 lg:p-10 rounded-[2.5rem] shadow-sm border border-slate-100"><h3 className="font-black text-slate-800 mb-2 text-xl">จำนวนลูกค้าในแต่ละขั้นตอน</h3><CSSBarChart data={chartData}/></div>
         </div>
-      )}
+      );
+    }
 
-      <div className="bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 rounded-[2.5rem] p-8 lg:p-12 text-white shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10 gap-4 mb-3">
-          <div><h2 className="text-4xl font-black">Admin Dashboard</h2><p className="text-purple-200 font-bold uppercase tracking-widest text-sm mt-1">หน้าต่างสรุปผลสำหรับผู้บริหาร</p></div>
-          <button onClick={testGroupTelegram} className="bg-white/20 hover:bg-white/30 backdrop-blur-md px-5 py-3 rounded-xl font-black text-sm transition flex items-center gap-2 border border-white/30 shadow-lg"><Icon name="telegram-logo" size={18}/> ทดสอบแจ้งเตือนห้องรวม</button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10 relative z-10">
-          <div className="bg-white/10 p-6 lg:p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ยอดขายรวมบริษัท</p><h3 className="text-4xl lg:text-5xl font-black text-amber-400">{formatCurrency(totalRev)}</h3></div>
-          <div className="bg-white/10 p-6 lg:p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ตัวแทนที่ใช้งาน</p><h3 className="text-4xl lg:text-5xl font-black text-blue-300">{agents.length}<span className="text-2xl font-bold"> คน</span></h3></div>
-          <div className="bg-white/10 p-6 lg:p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ฐานลูกค้ารวมทั้งหมด</p><h3 className="text-4xl lg:text-5xl font-black text-emerald-400">{customers.length}<span className="text-2xl font-bold"> ราย</span></h3></div>
-        </div>
-      </div>
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-8 lg:p-10">
-        <h3 className="font-black text-slate-800 text-2xl lg:text-3xl mb-6 flex items-center gap-3"><Icon name="users" className="text-blue-500"/> รายชื่อตัวแทน (Agents)</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest"><tr><th className="px-5 py-4 rounded-l-2xl">ชื่อตัวแทน</th><th className="px-5 py-4">ทีม</th><th className="px-5 py-4">เป้าหมาย (รายเดือน)</th><th className="px-5 py-4 rounded-r-2xl text-center">ลูกค้าที่ดูแล</th></tr></thead>
-            <tbody className="divide-y divide-slate-50">
-              {agents.map(a=>(
-                <tr key={a.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-5 py-5 font-black text-slate-800">{a.name}</td>
-                  <td className="px-5 py-5"><span className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-xl font-black text-xs uppercase tracking-widest">{a.team}</span></td>
-                  <td className="px-5 py-5 font-black text-orange-600">{formatCurrency(a.targetRevenue)}</td>
-                  <td className="px-5 py-5 font-black text-blue-600 text-xl text-center">{customers.filter(c=>c.agent_id===a.id).length}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
+    // ============================================================================
+    // RANKING VIEW
+    // ============================================================================
+    function RankingView({ users, customers, currentUser }) {
+      const teamAgents = users.filter(u=>u.role==='agent'&&u.team===currentUser.team);
+      const ranking = teamAgents.map(u=>{
+        const rev=customers.filter(c=>c.agent_id===u.id&&c.status==='ปิดการขาย').reduce((acc,c)=>acc+Number(c.premium||0),0);
+        const taskCount=customers.filter(c=>c.agent_id===u.id&&c.status!=='ปิดการขาย').length;
+        return {...u,rev,taskCount};
+      }).sort((a,b)=>b.rev-a.rev);
 
-// ============================================================================
-// ADMIN CUSTOMERS VIEW
-// ============================================================================
-function AdminCustomersView({ customers, users, updateCustomer, deleteCustomer }) {
-  const [search,setSearch]=useState('');
-  const [selectedCustomer,setSelectedCustomer]=useState(null);
-  const filtered=customers.filter(c=>(c.name||'').toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search));
-  return (
-    <div className="space-y-6 lg:space-y-8 fade-up">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <div><h2 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={36}/> ฐานข้อมูลรวม (Admin)</h2></div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <div className="w-full md:w-80 relative"><Icon name="magnifying-glass" className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-12 pr-5 py-3 border-2 border-slate-200 rounded-2xl outline-none font-bold focus:border-emerald-500 text-sm"/></div>
-          <button onClick={()=>exportToCSV(filtered,`All_Customers_Admin.csv`)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 px-4 py-3 rounded-2xl font-black shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap text-sm"><Icon name="file-csv" size={20}/><span className="hidden sm:inline">Export</span></button>
-        </div>
-      </div>
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-4 lg:p-6">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left whitespace-nowrap">
-            <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest">
-              <tr>
-                <th className="px-5 py-4 rounded-l-2xl">ชื่อลูกค้า</th>
-                <th className="px-5 py-4">เบอร์โทร</th>
-                <th className="px-5 py-4">สถานะ</th>
-                <th className="px-5 py-4">ตัวแทนผู้ดูแล</th>
-                <th className="px-5 py-4 text-right">ยอดเบี้ย</th>
-                <th className="px-5 py-4 text-center rounded-r-2xl">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map(c=>{
-                const agent=users.find(u=>u.id===c.agent_id);
+      const maxTaskCount = Math.max(...ranking.map(u=>u.taskCount), 1);
+
+      return (
+        <div className="max-w-4xl mx-auto space-y-8 fade-up">
+          <div className="text-center">
+            <div className="dow-accent w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-5 shadow-xl transform rotate-3"><Icon name="trophy" size={40} className="text-white"/></div>
+            <h2 className="text-3xl lg:text-4xl font-black text-slate-800">Team Ranking</h2>
+            <p className="text-slate-500 font-bold mt-1 text-sm uppercase tracking-widest bg-slate-200 inline-block px-4 py-1 rounded-full">ทีม: {currentUser.team}</p>
+          </div>
+
+          <div className="bg-[#0d1b3e] rounded-[2rem] p-8 shadow-2xl text-white">
+            <h3 className="text-lg font-black text-indigo-200 uppercase tracking-widest mb-6 italic">Member Workload Balance</h3>
+            <div className="space-y-6">
+              {ranking.map((u, idx) => {
+                const pct = Math.round((u.taskCount / maxTaskCount) * 100);
                 return (
-                  <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-4 font-black text-slate-800">{c.name}</td>
-                    <td className="px-5 py-4 text-slate-500 font-bold text-sm">{c.phone}</td>
-                    <td className="px-5 py-4"><span className="px-3 py-1.5 rounded-xl text-xs font-black border-2">{c.status}</span></td>
-                    <td className="px-5 py-4 text-blue-600 font-black">{agent?agent.name:'Unknown'}</td>
-                    <td className="px-5 py-4 text-right font-black text-emerald-600">{formatCurrency(c.premium)}</td>
-                    <td className="px-5 py-4 text-center"><button onClick={()=>setSelectedCustomer(c)} className="text-blue-500 hover:bg-blue-100 bg-blue-50 px-4 py-2 rounded-xl font-black transition flex items-center gap-2 mx-auto text-xs"><Icon name="eye" size={14}/> ดูข้อมูล</button></td>
-                  </tr>
+                  <div key={u.id}>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-black text-white uppercase tracking-wider text-sm italic">{u.name.toUpperCase()}{u.id===currentUser.id&&<span className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded-full ml-2 not-italic">คุณ</span>}</span>
+                      <span className="font-black text-indigo-300 text-sm">{u.taskCount} ภารกิจ</span>
+                    </div>
+                    <div className="workload-bar-track">
+                      <div className="workload-bar-fill" style={{width:`${pct}%`}}/>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      {selectedCustomer&&<CustomerModal customer={selectedCustomer} onClose={()=>setSelectedCustomer(null)} onSave={updateCustomer} onDelete={deleteCustomer}/>}
-    </div>
-  );
-}
-
-// ============================================================================
-// SETTINGS VIEW
-// ============================================================================
-function SettingsView({ user, handleUpdateUser, showToast, customers }) {
-  const [formData,setFormData]=useState({name:user.name,email:user.email||'',password:user.password||'',team:user.team||'',targetRevenue:user.targetRevenue||100000,telegramChatId:user.telegramChatId||''});
-  const [leadSources,setLeadSources]=useState(getLeadSources());
-  const [newSrc,setNewSrc]=useState('');
-
-  const testTelegramNotification=async()=>{
-    const testChatId=formData.telegramChatId||TELEGRAM_CHAT_ID;
-    try {
-      const res=await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:testChatId,text:`✅ <b>ทดสอบระบบแจ้งเตือน</b>\nIA CRM สามารถส่งข้อความหาคุณได้สำเร็จแล้วครับ!\n\n⏰ ระบบจะส่งสรุปงานให้อัตโนมัติทุกวันเวลา 08:00 น. และ 19:00 น.\n📦 Backup อัตโนมัติทุกวันอาทิตย์`,parse_mode:"HTML"})});
-      const data=await res.json();
-      if(data.ok) showToast('ส่งข้อความทดสอบสำเร็จ! เช็คใน Telegram ได้เลย');
-      else alert(`ส่งไม่สำเร็จ!\n\nสาเหตุ: ${data.description}`);
-    } catch { alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Telegram API'); }
-  };
-
-  const handleManualBackup = () => {
-    runManualBackup(customers, user, showToast);
-  };
-
-  const addSrc=()=>{
-    if(!newSrc.trim()) return;
-    const updated=[...leadSources,newSrc.trim()];
-    setLeadSources(updated); saveLeadSources(updated); setNewSrc('');
-    showToast('เพิ่มแหล่งที่มาสำเร็จ!');
-  };
-  const removeSrc=(s)=>{ const updated=leadSources.filter(x=>x!==s); setLeadSources(updated); saveLeadSources(updated); };
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-6 lg:space-y-8 fade-up">
-      <div className="p-8 lg:p-12 bg-white rounded-[2.5rem] shadow-sm border border-slate-100 text-center">
-        <Icon name="gear" size={56} className="mx-auto text-slate-300 mb-5"/>
-        <h2 className="text-2xl lg:text-3xl font-black mb-7">ตั้งค่าโปรไฟล์</h2>
-        <div className="space-y-5 text-left">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div><label className="text-xs font-black block mb-2 text-slate-400">อีเมล (ใช้เข้าระบบ)</label><input type="email" value={formData.email} onChange={e=>setFormData({...formData,email:e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
-            <div><label className="text-xs font-black block mb-2 text-slate-400">รหัสผ่าน</label><input type="text" value={formData.password} onChange={e=>setFormData({...formData,password:e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อ - นามสกุล</label><input type="text" value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
-            <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อทีม</label><input type="text" value={formData.team} onChange={e=>setFormData({...formData,team:e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
-          </div>
-          {user.role==='agent'&&(<div><label className="text-xs font-black block mb-2 text-slate-400">เป้ายอดขายต่อเดือน</label><input type="number" value={formData.targetRevenue} onChange={e=>setFormData({...formData,targetRevenue:Number(e.target.value)})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>)}
-          <div>
-            <label className="text-xs font-black block mb-1 text-slate-400">Telegram Chat ID (รับแจ้งเตือนส่วนตัว)</label>
-            <p className="text-xs text-slate-400 mb-2 font-bold">⏰ 08:00 & 19:00 น. ทุกวัน | 📦 Backup อัตโนมัติ<span className="text-orange-500 font-black"> ทุกวันอาทิตย์</span></p>
-            <div className="flex gap-2">
-              <input type="text" placeholder="เช่น 123456789" value={formData.telegramChatId} onChange={e=>setFormData({...formData,telegramChatId:e.target.value})} className="flex-1 border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/>
-              <button type="button" onClick={testTelegramNotification} className="bg-blue-100 text-blue-600 px-5 rounded-xl font-black hover:bg-blue-200 transition">ทดสอบ</button>
             </div>
           </div>
-          <button onClick={()=>{handleUpdateUser({...user,...formData});showToast('บันทึกการตั้งค่าโปรไฟล์เรียบร้อย!');}} className="w-full py-4 dow-accent text-white rounded-xl font-black text-lg hover:opacity-90 transition mt-3">บันทึกการเปลี่ยนแปลง</button>
-        </div>
-      </div>
 
-      {/* MANUAL BACKUP */}
-      <div className="p-8 lg:p-10 bg-white rounded-[2.5rem] shadow-sm border border-slate-100">
-        <h3 className="text-2xl font-black mb-2 flex items-center gap-3"><Icon name="cloud-arrow-up" className="text-indigo-500" size={24}/> Backup ข้อมูล</h3>
-        <p className="text-sm font-bold text-slate-500 mb-5">สำรองข้อมูลลูกค้าทั้งหมดของคุณ — ส่งไป Telegram และดาวน์โหลดเป็นไฟล์ JSON</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-5 text-center">
-            <Icon name="cloud-arrow-up" size={32} className="mx-auto text-indigo-500 mb-2"/>
-            <p className="font-black text-indigo-800 text-sm mb-1">Manual Backup</p>
-            <p className="text-xs text-indigo-600 font-bold mb-3">ส่ง Telegram + ดาวน์โหลดไฟล์ทันที</p>
-            <button onClick={handleManualBackup} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
-              <Icon name="download-simple" size={18}/> Backup เดี๋ยวนี้
-            </button>
+          <div className="bg-white rounded-[2.5rem] shadow-xl p-8 lg:p-10">
+            <h3 className="font-black text-slate-700 text-lg mb-5 flex items-center gap-2"><Icon name="currency-dollar" size={24} className="text-yellow-500"/> อันดับยอดขาย</h3>
+            {ranking.map((u,idx)=>(
+              <div key={u.id} className={`flex items-center justify-between p-5 mb-4 rounded-3xl border-2 transition-all hover:-translate-y-1 hover:shadow-lg ${idx===0?'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200':'bg-slate-50 border-slate-100'}`}>
+                <div className="flex items-center gap-5">
+                  <div className={`w-14 h-14 rounded-[1.5rem] flex items-center justify-center font-black text-xl ${idx===0?'dow-accent text-white shadow-lg':idx===1?'bg-slate-200 text-slate-500':idx===2?'bg-orange-100 text-orange-700':'bg-white border-2 border-slate-200 text-slate-400'}`}>{idx+1}</div>
+                  <div><p className="font-black text-slate-800 text-xl">{u.name}{u.id===currentUser.id&&<span className="text-[10px] bg-blue-600 text-white px-2.5 py-0.5 rounded-full ml-2 shadow-sm align-middle uppercase tracking-widest">คุณ</span>}</p></div>
+                </div>
+                <h3 className={`text-2xl lg:text-3xl font-black ${idx===0?'text-orange-600':'text-slate-700'}`}>{formatCurrency(u.rev)}</h3>
+              </div>
+            ))}
           </div>
-          <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5 text-center">
-            <Icon name="calendar-check" size={32} className="mx-auto text-emerald-500 mb-2"/>
-            <p className="font-black text-emerald-800 text-sm mb-1">Auto Backup</p>
-            <p className="text-xs text-emerald-600 font-bold mb-3">ทุกวันอาทิตย์ — ส่ง Telegram อัตโนมัติ</p>
-            <div className="w-full py-3 bg-emerald-100 text-emerald-700 rounded-xl font-black text-sm flex items-center justify-center gap-2">
-              <Icon name="check-circle" size={18}/> เปิดใช้งานอยู่
+        </div>
+      );
+    }
+
+    // ============================================================================
+    // AI ASSISTANT VIEW
+    // ============================================================================
+    function AIAssistantView() {
+      const [inputText,setInputText]=useState('');
+      const [messages,setMessages]=useState([]);
+      const [isLoading,setIsLoading]=useState(false);
+      const messagesEndRef=useRef(null);
+      useEffect(()=>{messagesEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages,isLoading]);
+      const handleSend=async()=>{
+        if(!inputText.trim()||isLoading) return;
+        const userMsg=inputText.trim(); setInputText('');
+        setMessages(prev=>[...prev,{role:'user',text:userMsg}]); setIsLoading(true);
+        try {
+          const apiKey="AIzaSyDbHog1AJB9nmrPvQtBefDIeF-uy_y4XjU";
+          const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+          const payload={contents:[{parts:[{text:userMsg}]}],systemInstruction:{parts:[{text:"คุณคือ AI ผู้ช่วยสำหรับตัวแทนขายประกันภัยในระบบ IA CRM ให้คำแนะนำเกี่ยวกับการปิดการขาย สร้างสคริปต์การโทร ตอบข้อโต้แย้ง และวิเคราะห์ข้อมูลลูกค้า ตอบเป็นภาษาไทยด้วยความสุภาพ มืออาชีพ และกระชับเข้าใจง่าย ใช้ Markdown ในการจัดรูปแบบข้อความให้สวยงามได้"}]}};
+          const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+          const data=await res.json();
+          if(!res.ok) throw new Error(data.error?.message||'API Error');
+          const reply=data.candidates?.[0]?.content?.parts?.[0]?.text||'ขออภัย ไม่สามารถประมวลผลได้ในขณะนี้';
+          setMessages(prev=>[...prev,{role:'model',text:reply}]);
+        } catch {
+          setMessages(prev=>[...prev,{role:'model',text:'ขออภัย ระบบ AI ไม่สามารถตอบกลับได้ในขณะนี้'}]);
+        } finally { setIsLoading(false); }
+      };
+      const formatMessage=(text)=>({__html:text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')});
+      return (
+        <div className="max-w-4xl mx-auto space-y-6 flex flex-col h-[calc(100vh-160px)] fade-up">
+          <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 rounded-[2.5rem] p-6 lg:p-12 shadow-2xl text-white relative overflow-hidden flex flex-col flex-1 min-h-0 border border-indigo-500/20">
+            <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
+            {messages.length===0?(
+              <div className="flex-1 flex flex-col items-center justify-center text-center relative z-10">
+                <Icon name="brain" size={64} className="mx-auto mb-6 text-indigo-300 animate-pulse drop-shadow-[0_0_15px_rgba(165,180,252,0.5)]"/>
+                <h2 className="text-3xl lg:text-5xl font-black mb-4 tracking-tight">IA AI Assistant</h2>
+                <p className="text-indigo-200 font-bold text-base max-w-xl mx-auto leading-relaxed">พิมพ์ปรึกษา AI ผู้ช่วยได้เลย!<br/>เช่น "ขอสคริปต์โทรหาลูกค้าเก่า", "วิธีตอบข้อโต้แย้งเรื่องเบี้ยแพง"</p>
+              </div>
+            ):(
+              <div className="flex-1 overflow-y-auto mb-5 pr-2 space-y-5 custom-scrollbar relative z-10">
+                {messages.map((msg,idx)=>(
+                  <div key={idx} className={`flex flex-col ${msg.role==='user'?'items-end':'items-start'}`}>
+                    <div className={`max-w-[85%] p-4 rounded-3xl ${msg.role==='user'?'bg-indigo-500 text-white rounded-br-sm shadow-md':'bg-white/10 text-indigo-50 rounded-bl-sm border border-white/10 backdrop-blur-md shadow-inner'}`}>
+                      {msg.role==='model'&&<Icon name="sparkle" className="text-indigo-300 mb-2" size={18}/>}
+                      <p className="whitespace-pre-wrap font-medium leading-relaxed text-sm" dangerouslySetInnerHTML={formatMessage(msg.text)}></p>
+                    </div>
+                  </div>
+                ))}
+                {isLoading&&(<div className="flex flex-col items-start"><div className="max-w-[85%] p-4 rounded-3xl bg-white/10 text-indigo-50 rounded-bl-sm border border-white/10 backdrop-blur-md flex items-center gap-3"><Icon name="circle-notch" className="animate-spin text-indigo-300" size={18}/><span className="font-bold text-indigo-200 text-sm">AI กำลังวิเคราะห์...</span></div></div>)}
+                <div ref={messagesEndRef}/>
+              </div>
+            )}
+            <form onSubmit={e=>{e.preventDefault();handleSend();}} className="mt-auto bg-white/10 p-3 rounded-3xl flex gap-3 backdrop-blur-xl border border-white/20 relative z-10 shadow-inner shrink-0">
+              <input type="text" value={inputText} onChange={e=>setInputText(e.target.value)} disabled={isLoading} placeholder="พิมพ์ข้อความปรึกษา AI..." className="flex-1 bg-transparent border-none text-white outline-none placeholder-indigo-300/70 font-bold px-4 py-2 text-sm"/>
+              <button type="submit" disabled={isLoading||!inputText.trim()} className="bg-indigo-500 px-6 py-2.5 rounded-2xl font-black hover:bg-indigo-400 shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm">ส่ง <Icon name="paper-plane-right"/></button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================================
+    // ADMIN HOME VIEW
+    // ============================================================================
+    function AdminHomeView({ users, customers, showToast, pendingUsers, approveUser, rejectUser }) {
+      const agents=users.filter(u=>u.role==='agent'&&u.status==='active');
+      const closedCases=customers.filter(c=>c.status==='ปิดการขาย');
+      const totalRev=closedCases.reduce((acc,c)=>acc+Number(c.premium||0),0);
+      const testGroupTelegram=async()=>{
+        try {
+          const res=await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:TELEGRAM_CHAT_ID,text:`📢 <b>ทดสอบระบบแจ้งเตือนห้องรวม</b>\nผู้ดูแลระบบกำลังทดสอบระบบแจ้งเตือน IA CRM ฝั่ง Admin\nสถานะการเชื่อมต่อ: <b>สำเร็จ! ✅</b>`,parse_mode:"HTML"})});
+          const data=await res.json();
+          if(data.ok) showToast('ส่งแจ้งเตือนห้องรวมสำเร็จ!'); else alert(`ส่งไม่สำเร็จ: ${data.description}`);
+        } catch { alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Telegram API'); }
+      };
+      return (
+        <div className="space-y-8 fade-up">
+          {pendingUsers.length > 0 && (
+            <div className="bg-yellow-50 border-2 border-yellow-300 rounded-[2rem] p-6 fade-up">
+              <h3 className="font-black text-yellow-800 flex items-center gap-3 text-lg mb-4"><Icon name="user-circle-gear" size={24}/> มีผู้ใช้รออนุมัติ {pendingUsers.length} ราย</h3>
+              <div className="space-y-3">
+                {pendingUsers.map(u=>(
+                  <div key={u.id} className="bg-white rounded-2xl p-4 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-black text-slate-800">{u.name}</p>
+                      <p className="text-xs text-slate-500 font-bold">{u.email} | ทีม: {u.team}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={()=>rejectUser(u)} className="px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-xl font-black text-xs hover:bg-red-100 transition">ปฏิเสธ</button>
+                      <button onClick={()=>approveUser(u)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-black text-xs hover:bg-emerald-600 transition shadow">อนุมัติ</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 rounded-[2.5rem] p-8 lg:p-12 text-white shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 rounded-full blur-3xl -mt-40 -mr-40 pointer-events-none"></div>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10 gap-4 mb-3">
+              <div><h2 className="text-4xl font-black">Admin Dashboard</h2><p className="text-purple-200 font-bold uppercase tracking-widest text-sm mt-1">หน้าต่างสรุปผลสำหรับผู้บริหาร</p></div>
+              <button onClick={testGroupTelegram} className="bg-white/20 hover:bg-white/30 backdrop-blur-md px-5 py-3 rounded-xl font-black text-sm transition flex items-center gap-2 border border-white/30 shadow-lg"><Icon name="telegram-logo" size={18}/> ทดสอบแจ้งเตือนห้องรวม</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10 relative z-10">
+              <div className="bg-white/10 p-6 lg:p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ยอดขายรวมบริษัท</p><h3 className="text-4xl lg:text-5xl font-black text-amber-400">{formatCurrency(totalRev)}</h3></div>
+              <div className="bg-white/10 p-6 lg:p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ตัวแทนที่ใช้งาน</p><h3 className="text-4xl lg:text-5xl font-black text-blue-300">{agents.length}<span className="text-2xl font-bold"> คน</span></h3></div>
+              <div className="bg-white/10 p-6 lg:p-8 rounded-[2rem] border border-white/20 backdrop-blur-md shadow-lg"><p className="text-purple-200 text-xs font-black mb-2 uppercase tracking-widest">ฐานลูกค้ารวมทั้งหมด</p><h3 className="text-4xl lg:text-5xl font-black text-emerald-400">{customers.length}<span className="text-2xl font-bold"> ราย</span></h3></div>
+            </div>
+          </div>
+          <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-8 lg:p-10">
+            <h3 className="font-black text-slate-800 text-2xl lg:text-3xl mb-6 flex items-center gap-3"><Icon name="users" className="text-blue-500"/> รายชื่อตัวแทน (Agents)</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest"><tr><th className="px-5 py-4 rounded-l-2xl">ชื่อตัวแทน</th><th className="px-5 py-4">ทีม</th><th className="px-5 py-4">เป้าหมาย (รายเดือน)</th><th className="px-5 py-4 rounded-r-2xl text-center">ลูกค้าที่ดูแล</th></tr></thead>
+                <tbody className="divide-y divide-slate-50">
+                  {agents.map(a=>(
+                    <tr key={a.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-5 py-5 font-black text-slate-800">{a.name}</td>
+                      <td className="px-5 py-5"><span className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-xl font-black text-xs uppercase tracking-widest">{a.team}</span></td>
+                      <td className="px-5 py-5 font-black text-orange-600">{formatCurrency(a.targetRevenue)}</td>
+                      <td className="px-5 py-5 font-black text-blue-600 text-xl text-center">{customers.filter(c=>c.agent_id===a.id).length}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      </div>
+      );
+    }
 
-      {/* LEAD SOURCE MANAGER */}
-      <div className="p-8 lg:p-10 bg-white rounded-[2.5rem] shadow-sm border border-slate-100">
-        <h3 className="text-2xl font-black mb-5 flex items-center gap-3"><Icon name="funnel" className="text-purple-500" size={24}/> จัดการแหล่งที่มา (Lead Source)</h3>
-        <div className="flex gap-3 mb-5">
-          <input type="text" placeholder="เพิ่มแหล่งที่มาใหม่..." value={newSrc} onChange={e=>setNewSrc(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addSrc();}} className="flex-1 border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-purple-400"/>
-          <button onClick={addSrc} className="px-6 py-3 bg-purple-600 text-white rounded-xl font-black hover:bg-purple-700 transition shadow-md">เพิ่ม</button>
+    // ============================================================================
+    // ADMIN CUSTOMERS VIEW
+    // ============================================================================
+    function AdminCustomersView({ customers, users, updateCustomer, deleteCustomer }) {
+      const [search,setSearch]=useState('');
+      const [selectedCustomer,setSelectedCustomer]=useState(null);
+      const filtered=customers.filter(c=>(c.name||'').toLowerCase().includes(search.toLowerCase())||(c.phone||'').includes(search));
+      return (
+        <div className="space-y-6 lg:space-y-8 fade-up">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <div><h2 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3"><Icon name="database" className="text-emerald-500" size={36}/> ฐานข้อมูลรวม (Admin)</h2></div>
+            <div className="flex gap-3 w-full md:w-auto">
+              <div className="w-full md:w-80 relative"><Icon name="magnifying-glass" className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-12 pr-5 py-3 border-2 border-slate-200 rounded-2xl outline-none font-bold focus:border-emerald-500 text-sm"/></div>
+              <button onClick={()=>exportToCSV(filtered,`All_Customers_Admin.csv`)} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border-2 border-emerald-200 hover:border-emerald-500 px-4 py-3 rounded-2xl font-black shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap text-sm"><Icon name="file-csv" size={20}/><span className="hidden sm:inline">Export</span></button>
+            </div>
+          </div>
+          <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-4 lg:p-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left whitespace-nowrap">
+                <thead className="bg-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest">
+                  <tr>
+                    <th className="px-5 py-4 rounded-l-2xl">ชื่อลูกค้า</th>
+                    <th className="px-5 py-4">เบอร์โทร</th>
+                    <th className="px-5 py-4">สถานะ</th>
+                    <th className="px-5 py-4">ตัวแทนผู้ดูแล</th>
+                    <th className="px-5 py-4 text-right">ยอดเบี้ย</th>
+                    <th className="px-5 py-4 text-center rounded-r-2xl">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map(c=>{
+                    const agent=users.find(u=>u.id===c.agent_id);
+                    return (
+                      <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-5 py-4 font-black text-slate-800">{c.name}</td>
+                        <td className="px-5 py-4 text-slate-500 font-bold text-sm">{c.phone}</td>
+                        <td className="px-5 py-4"><span className="px-3 py-1.5 rounded-xl text-xs font-black border-2">{c.status}</span></td>
+                        <td className="px-5 py-4 text-blue-600 font-black">{agent?agent.name:'Unknown'}</td>
+                        <td className="px-5 py-4 text-right font-black text-emerald-600">{formatCurrency(c.premium)}</td>
+                        <td className="px-5 py-4 text-center"><button onClick={()=>setSelectedCustomer(c)} className="text-blue-500 hover:bg-blue-100 bg-blue-50 px-4 py-2 rounded-xl font-black transition flex items-center gap-2 mx-auto text-xs"><Icon name="eye" size={14}/> ดูข้อมูล</button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {selectedCustomer&&<CustomerModal customer={selectedCustomer} onClose={()=>setSelectedCustomer(null)} onSave={updateCustomer} onDelete={deleteCustomer}/>}
         </div>
-        <div className="flex flex-wrap gap-3">
-          {leadSources.map(s=>(
-            <span key={s} className={`flex items-center gap-2 px-4 py-2 rounded-2xl font-black text-sm border-2 ${DEFAULT_LEAD_SOURCES.includes(s)?'bg-slate-50 border-slate-200 text-slate-600':'bg-purple-50 border-purple-200 text-purple-700'}`}>
-              {s}
-              {!DEFAULT_LEAD_SOURCES.includes(s)&&<button onClick={()=>removeSrc(s)} className="text-purple-300 hover:text-red-500 transition font-black ml-1">✕</button>}
-            </span>
-          ))}
+      );
+    }
+
+    // ============================================================================
+    // SETTINGS VIEW
+    // ============================================================================
+    function SettingsView({ user, handleUpdateUser, showToast, customers }) {
+      const [formData,setFormData]=useState({name:user.name,email:user.email||'',password:user.password||'',team:user.team||'',targetRevenue:user.targetRevenue||100000,telegramChatId:user.telegramChatId||''});
+      const [leadSources,setLeadSources]=useState(getLeadSources());
+      const [newSrc,setNewSrc]=useState('');
+
+      const testTelegramNotification=async()=>{
+        const testChatId=formData.telegramChatId||TELEGRAM_CHAT_ID;
+        try {
+          const res=await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:testChatId,text:`✅ <b>ทดสอบระบบแจ้งเตือน</b>\nIA CRM สามารถส่งข้อความหาคุณได้สำเร็จแล้วครับ!\n\n⏰ ระบบจะส่งสรุปงานให้อัตโนมัติทุกวันเวลา 08:00 น. และ 19:00 น.\n📦 Backup อัตโนมัติทุกวันอาทิตย์`,parse_mode:"HTML"})});
+          const data=await res.json();
+          if(data.ok) showToast('ส่งข้อความทดสอบสำเร็จ! เช็คใน Telegram ได้เลย');
+          else alert(`ส่งไม่สำเร็จ!\n\nสาเหตุ: ${data.description}`);
+        } catch { alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Telegram API'); }
+      };
+
+      const handleManualBackup = () => { runManualBackup(customers, user, showToast); };
+
+      const addSrc=()=>{
+        if(!newSrc.trim()) return;
+        const updated=[...leadSources,newSrc.trim()];
+        setLeadSources(updated); saveLeadSources(updated); setNewSrc('');
+        showToast('เพิ่มแหล่งที่มาสำเร็จ!');
+      };
+      const removeSrc=(s)=>{ const updated=leadSources.filter(x=>x!==s); setLeadSources(updated); saveLeadSources(updated); };
+
+      return (
+        <div className="max-w-2xl mx-auto space-y-6 lg:space-y-8 fade-up">
+          <div className="p-8 lg:p-12 bg-white rounded-[2.5rem] shadow-sm border border-slate-100 text-center">
+            <Icon name="gear" size={56} className="mx-auto text-slate-300 mb-5"/>
+            <h2 className="text-2xl lg:text-3xl font-black mb-7">ตั้งค่าโปรไฟล์</h2>
+            <div className="space-y-5 text-left">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div><label className="text-xs font-black block mb-2 text-slate-400">อีเมล (ใช้เข้าระบบ)</label><input type="email" value={formData.email} onChange={e=>setFormData({...formData,email:e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+                <div><label className="text-xs font-black block mb-2 text-slate-400">รหัสผ่าน</label><input type="text" value={formData.password} onChange={e=>setFormData({...formData,password:e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อ - นามสกุล</label><input type="text" value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+                <div><label className="text-xs font-black block mb-2 text-slate-400">ชื่อทีม</label><input type="text" value={formData.team} onChange={e=>setFormData({...formData,team:e.target.value})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>
+              </div>
+              {user.role==='agent'&&(<div><label className="text-xs font-black block mb-2 text-slate-400">เป้ายอดขายต่อเดือน</label><input type="number" value={formData.targetRevenue} onChange={e=>setFormData({...formData,targetRevenue:Number(e.target.value)})} className="w-full border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/></div>)}
+              <div>
+                <label className="text-xs font-black block mb-1 text-slate-400">Telegram Chat ID (รับแจ้งเตือนส่วนตัว)</label>
+                <p className="text-xs text-slate-400 mb-2 font-bold">⏰ 08:00 & 19:00 น. ทุกวัน | 📦 Backup Auto <span className="text-orange-500 font-black">ทุกวันอาทิตย์</span></p>
+                <div className="flex gap-2">
+                  <input type="text" placeholder="เช่น 123456789" value={formData.telegramChatId} onChange={e=>setFormData({...formData,telegramChatId:e.target.value})} className="flex-1 border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-blue-500"/>
+                  <button type="button" onClick={testTelegramNotification} className="bg-blue-100 text-blue-600 px-5 rounded-xl font-black hover:bg-blue-200 transition">ทดสอบ</button>
+                </div>
+              </div>
+              <button onClick={()=>{handleUpdateUser({...user,...formData});showToast('บันทึกการตั้งค่าโปรไฟล์เรียบร้อย!');}} className="w-full py-4 dow-accent text-white rounded-xl font-black text-lg hover:opacity-90 transition mt-3">บันทึกการเปลี่ยนแปลง</button>
+            </div>
+          </div>
+
+          {/* MANUAL BACKUP → Excel */}
+          <div className="p-8 lg:p-10 bg-white rounded-[2.5rem] shadow-sm border border-slate-100">
+            <h3 className="text-2xl font-black mb-2 flex items-center gap-3"><Icon name="microsoft-excel-logo" className="text-emerald-600" size={28}/> Backup ข้อมูลเป็น Excel</h3>
+            <p className="text-sm font-bold text-slate-500 mb-5">ดาวน์โหลดข้อมูลลูกค้าทั้งหมดเป็นไฟล์ .xlsx (3 Sheet: ข้อมูลลูกค้า, สรุปสถานะ, กรมธรรม์)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5 text-center">
+                <Icon name="microsoft-excel-logo" size={32} className="mx-auto text-emerald-600 mb-2"/>
+                <p className="font-black text-emerald-800 text-sm mb-1">Manual Backup → Excel</p>
+                <p className="text-xs text-emerald-600 font-bold mb-3">ดาวน์โหลดไฟล์ .xlsx ทันที</p>
+                <button onClick={handleManualBackup} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2">
+                  <Icon name="download-simple" size={18}/> Backup เดี๋ยวนี้
+                </button>
+              </div>
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5 text-center">
+                <Icon name="calendar-check" size={32} className="mx-auto text-blue-500 mb-2"/>
+                <p className="font-black text-blue-800 text-sm mb-1">Auto Backup</p>
+                <p className="text-xs text-blue-600 font-bold mb-3">ทุกวันอาทิตย์ — ดาวน์โหลด Excel อัตโนมัติ</p>
+                <div className="w-full py-3 bg-blue-100 text-blue-700 rounded-xl font-black text-sm flex items-center justify-center gap-2">
+                  <Icon name="check-circle" size={18}/> เปิดใช้งานอยู่
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* LEAD SOURCE MANAGER */}
+          <div className="p-8 lg:p-10 bg-white rounded-[2.5rem] shadow-sm border border-slate-100">
+            <h3 className="text-2xl font-black mb-5 flex items-center gap-3"><Icon name="funnel" className="text-purple-500" size={24}/> จัดการแหล่งที่มา (Lead Source)</h3>
+            <div className="flex gap-3 mb-5">
+              <input type="text" placeholder="เพิ่มแหล่งที่มาใหม่..." value={newSrc} onChange={e=>setNewSrc(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addSrc();}} className="flex-1 border-2 rounded-xl px-5 py-4 font-bold outline-none focus:border-purple-400"/>
+              <button onClick={addSrc} className="px-6 py-3 bg-purple-600 text-white rounded-xl font-black hover:bg-purple-700 transition shadow-md">เพิ่ม</button>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {leadSources.map(s=>(
+                <span key={s} className={`flex items-center gap-2 px-4 py-2 rounded-2xl font-black text-sm border-2 ${DEFAULT_LEAD_SOURCES.includes(s)?'bg-slate-50 border-slate-200 text-slate-600':'bg-purple-50 border-purple-200 text-purple-700'}`}>
+                  {s}
+                  {!DEFAULT_LEAD_SOURCES.includes(s)&&<button onClick={()=>removeSrc(s)} className="text-purple-300 hover:text-red-500 transition font-black ml-1">✕</button>}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  );
-}
+      );
+    }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<NovaCRMApp/>);
-```
-
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<NovaCRMApp/>);
   </script>
 </body>
 </html>
