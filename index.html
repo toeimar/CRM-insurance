@@ -292,14 +292,13 @@
       const header = `📦 <b>Backup รายสัปดาห์ - ${getWeekKey()}</b>\n👤 ตัวแทน: ${user.name}\n📊 ลูกค้าทั้งหมด: ${myCustomers.length} ราย\n💰 ปิดการขาย: ${myCustomers.filter(c=>c.status==='ปิดการขาย').length} ราย\n\n`;
       const summaryLines = myCustomers.map(c => `• ${c.name} | ${c.phone} | ${c.status} | ${formatCurrency(c.premium)}`).join('\n');
       const summaryMsg = header + summaryLines.slice(0, 3000);
-      /* [DISABLED] ระงับการส่งข้อความสรุปและ JSON ไป Telegram
-      notifyTelegram(summaryMsg, user.telegramChatId || TELEGRAM_CHAT_ID);
-      chunks.forEach((chunk, i) => {
-        setTimeout(() => {
-          notifyTelegram(`📄 <b>JSON Backup Part ${i+1}/${chunks.length}</b>\n<code>${chunk.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code>`, user.telegramChatId || TELEGRAM_CHAT_ID);
-        }, (i+1) * 2000);
-      });
-      */
+      // [DISABLED] ระงับการส่งข้อความสรุปและ JSON ไป Telegram
+      // notifyTelegram(summaryMsg, user.telegramChatId || TELEGRAM_CHAT_ID);
+      // chunks.forEach((chunk, i) => {
+      //   setTimeout(() => {
+      //     notifyTelegram('JSON Backup chunk', user.telegramChatId || TELEGRAM_CHAT_ID);
+      //   }, (i+1) * 2000);
+      // });
       localStorage.setItem(key, 'true');
     };
 
@@ -315,22 +314,20 @@
       for (let i = 0; i < json.length; i += chunkSize) chunks.push(json.slice(i, i + chunkSize));
       const header = `📦 <b>Manual Backup - ${timestamp}</b>\n👤 ตัวแทน: ${user.name}\n📊 ลูกค้าทั้งหมด: ${myCustomers.length} ราย\n💰 ปิดการขาย: ${myCustomers.filter(c=>c.status==='ปิดการขาย').length} ราย\n\n`;
       const summaryLines = myCustomers.map(c => `• ${c.name} | ${c.phone} | ${c.status} | ${formatCurrency(c.premium)}`).join('\n');
-      /* [DISABLED] ระงับการส่งข้อความสรุปและ JSON chunks ไป Telegram
-      notifyTelegram(header + summaryLines.slice(0, 3000), user.telegramChatId || TELEGRAM_CHAT_ID);
-      chunks.forEach((chunk, i) => {
-        setTimeout(() => {
-          notifyTelegram(`📄 <b>JSON Backup Part ${i+1}/${chunks.length}</b>\n<code>${chunk.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code>`, user.telegramChatId || TELEGRAM_CHAT_ID);
-        }, (i+1) * 2000);
-      });
-      */
-      /* [DISABLED] ระงับการดาวน์โหลดไฟล์ JSON ลงเครื่อง
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `IA_CRM_Backup_${user.name}_${getTodayStr()}.json`);
-      document.body.appendChild(link); link.click(); document.body.removeChild(link);
-      */
+      // [DISABLED] ระงับการส่งข้อความสรุปและ JSON chunks ไป Telegram
+      // notifyTelegram(header + summaryLines.slice(0, 3000), user.telegramChatId || TELEGRAM_CHAT_ID);
+      // chunks.forEach((chunk, i) => {
+      //   setTimeout(() => {
+      //     notifyTelegram('JSON Backup chunk', user.telegramChatId || TELEGRAM_CHAT_ID);
+      //   }, (i+1) * 2000);
+      // });
+      // [DISABLED] ระงับการดาวน์โหลดไฟล์ JSON ลงเครื่อง
+      // const blob = new Blob([json], { type: 'application/json' });
+      // const url = URL.createObjectURL(blob);
+      // const link = document.createElement('a');
+      // link.href = url;
+      // link.setAttribute('download', 'IA_CRM_Backup.json');
+      // document.body.appendChild(link); link.click(); document.body.removeChild(link);
       showToast(`Backup บันทึกแล้ว (${myCustomers.length} ราย) — ${timestamp}`);
     };
 
@@ -1155,17 +1152,15 @@
               if(todaysTasks.length>0){ msg+=`📝 <b>สิ่งที่ต้องทำวันนี้ (Tasks):</b>\n`; todaysTasks.forEach(t=>{msg+=`• [ ] ${t.title}\n`;}); msg+=`\n`; }
               if(otherAlerts.length>0){ msg+=`💡 <b>Smart Alerts:</b>\n`; otherAlerts.forEach(a=>{msg+=`• <b>${a.title}:</b> ${a.desc}\n`;}); }
               msg+=`\n<i>เข้าสู่ระบบ IA CRM เพื่อจัดการงานวันนี้เลย!</i>`;
-              /* [DISABLED] ระงับการส่งแจ้งเตือนประจำวันไป Telegram
-              notifyTelegram(msg, user.telegramChatId||TELEGRAM_CHAT_ID);
-              */
+              // [DISABLED] ระงับการส่งแจ้งเตือนประจำวันไป Telegram
+              // notifyTelegram(msg, user.telegramChatId||TELEGRAM_CHAT_ID);
             }
             if(inactiveAlerts.length>0){
               let msg=`⚠️ <b>แจ้งเตือนลูกค้าขาดการติดต่อ (เกิน 30 วัน)</b>\n👤 ตัวแทน: ${user.name}\n\n`;
               inactiveAlerts.forEach(a=>{msg+=`• ${a.desc}\n`;});
               msg+=`\n<i>กรุณาอัปเดตการดูแลลูกค้าในระบบด่วน!</i>`;
-              /* [DISABLED] ระงับการส่งแจ้งเตือน inactive ไป Telegram
-              notifyTelegram(msg, TELEGRAM_CHAT_ID);
-              */
+              // [DISABLED] ระงับการส่งแจ้งเตือน inactive ไป Telegram
+              // notifyTelegram(msg, TELEGRAM_CHAT_ID);
             }
             localStorage.setItem(storageKey,'true');
           }
@@ -1188,10 +1183,9 @@
             msg+=`\n<i>IA CRM - ขอให้มีวันที่ดี! 💪</i>`;
             return msg;
           };
-          /* [DISABLED] ระงับการส่งสรุปงาน 08:00 & 19:00 ไป Telegram
-          if(hhmm==='08:00' && !localStorage.getItem(key08)){ notifyTelegram(buildMsg('🌅 สวัสดีตอนเช้า'), user.telegramChatId||TELEGRAM_CHAT_ID); localStorage.setItem(key08,'true'); }
-          if(hhmm==='19:00' && !localStorage.getItem(key19)){ notifyTelegram(buildMsg('🌆 สรุปงานตอนเย็น'), user.telegramChatId||TELEGRAM_CHAT_ID); localStorage.setItem(key19,'true'); }
-          */
+          // [DISABLED] ระงับการส่งสรุปงาน 08:00 & 19:00 ไป Telegram
+          // if(hhmm==='08:00' && !localStorage.getItem(key08)){ notifyTelegram(buildMsg('สวัสดีตอนเช้า'), user.telegramChatId||TELEGRAM_CHAT_ID); localStorage.setItem(key08,'true'); }
+          // if(hhmm==='19:00' && !localStorage.getItem(key19)){ notifyTelegram(buildMsg('สรุปงานตอนเย็น'), user.telegramChatId||TELEGRAM_CHAT_ID); localStorage.setItem(key19,'true'); }
         };
         checkScheduledNotify();
         const interval = setInterval(checkScheduledNotify, 30000);
