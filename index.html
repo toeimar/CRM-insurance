@@ -1686,11 +1686,16 @@
       };
 
       const handleSave = () => {
-        if(formData.status==='ปิดการขาย'&&customer.status!=='ปิดการขาย') formData.closedDate=getTodayStr();
-        if(!formData.lastContact) formData.lastContact=getTodayStr();
-        onSave(formData, newlyAddedPoliciesForAlert); onClose();
-      };
-
+  let finalData = { ...formData };
+  if (finalData.status === 'ปิดการขาย' && customer.status !== 'ปิดการขาย') {
+    finalData.closedDate = getTodayStr();
+  }
+  if (!finalData.lastContact) {
+    finalData.lastContact = getTodayStr();
+  }
+  onSave(finalData, newlyAddedPoliciesForAlert);
+  onClose();
+};
       const handleImageUpload = async (e) => {
         const files = Array.from(e.target.files);
         const newAttachments = [];
@@ -1723,16 +1728,41 @@
         setNewCareNote('');
       };
 
-      const generateAiInsight = () => {
-        setIsAiLoading(true);
-        setTimeout(()=>{
-          let insight="";
-          if(formData.status==='ปิดการขาย') insight=`AI (Aftercare): ลูกค้าปิดการขายแผน ${formData.interestedPlan} ไปแล้ว แนะนำให้รักษาสัมพันธ์และนำเสนอแผนควบการลงทุนเพิ่มเติมในปีหน้า`;
-          else if(formData.status==='นัดหมาย') insight=`AI (Closing Strategy): ลูกค้ามีรายได้ ${formData.income} และสนใจแผน ${formData.interestedPlan} มีโอกาสปิดการขาย 85% เตรียมข้อมูลเรื่องภาษีไปนำเสนอเพิ่มเติม`;
-          else insight=`AI วิเคราะห์: ลูกค้ามีสถานะ ${formData.status} แนะนำให้ส่งบทความสั้นๆ ทาง Line (${formData.lineId||'เบอร์โทร'}) ก่อนโทรคุย`;
-          setAiInsight(insight); setIsAiLoading(false);
-        },1500);
-      };
+      const generateAiInsight = async () => {
+  setIsAiLoading(true);
+  setAiInsight(null);
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: `วิเคราะห์ลูกค้าประกันรายนี้และให้คำแนะนำการขาย:
+ชื่อ: ${formData.name}
+อายุ: ${formData.age} ปี
+อาชีพ: ${formData.occupation}
+รายได้: ${formData.income}
+สถานะ: ${formData.status}
+แผนที่สนใจ: ${formData.interestedPlan || 'ยังไม่ระบุ'}
+มีประกันเดิม: ${formData.hasOldPolicy ? 'มี - ' + formData.oldPolicyDetails : 'ไม่มี'}
+หมายเหตุ: ${formData.note || '-'}
+
+กรุณาวิเคราะห์และให้คำแนะนำเป็นภาษาไทย กระชับ ไม่เกิน 5 บรรทัด`
+        }]
+      })
+    });
+    const data = await response.json();
+    const text = data.content?.[0]?.text || 'ไม่สามารถวิเคราะห์ได้';
+    setAiInsight(text);
+  } catch {
+    setAiInsight('ขออภัย ระบบ AI ไม่สามารถวิเคราะห์ได้ในขณะนี้');
+  } finally {
+    setIsAiLoading(false);
+  }
+};
 
       return (
         <>
