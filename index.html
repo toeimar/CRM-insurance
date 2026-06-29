@@ -1639,7 +1639,11 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => new Promise((res,
           const diff=c.lastContact?Math.ceil((new Date()-new Date(c.lastContact))/(1000*60*60*24)):0;
           matchStatus=diff>30&&c.status!=='ปิดการขาย';
         } else matchStatus=c.status===activeTab;
-        return matchSearch&&matchStatus;
+                return matchSearch&&matchStatus;
+      }).sort((a,b) => {
+        const da = a.lastContact || a.id || '';
+        const db2 = b.lastContact || b.id || '';
+        return db2.localeCompare(da);
       });
 
       return (
@@ -2441,12 +2445,12 @@ const handleDeletePolicy = (i) => {
               <button onClick={addSrc} className="px-6 py-3 bg-purple-600 text-white rounded-xl font-black hover:bg-purple-700 transition shadow-md">เพิ่ม</button>
             </div>
             <div className="flex flex-wrap gap-3">
-              {leadSources.map(s=>(
-                <span key={s} className={`flex items-center gap-2 px-4 py-2 rounded-2xl font-black text-sm border-2 ${DEFAULT_LEAD_SOURCES.includes(s)?'bg-slate-50 border-slate-200 text-slate-600':'bg-purple-50 border-purple-200 text-purple-700'}`}>
-                  {s}
-                  {!DEFAULT_LEAD_SOURCES.includes(s)&&<button onClick={()=>removeSrc(s)} className="text-purple-300 hover:text-red-500 transition font-black ml-1">✕</button>}
-                </span>
-              ))}
+                          {leadSources.map(s=>(
+              <span key={s} className={`flex items-center gap-2 px-4 py-2 rounded-2xl font-black text-sm border-2 ${DEFAULT_LEAD_SOURCES.includes(s)?'bg-slate-50 border-slate-200 text-slate-600':'bg-purple-50 border-purple-200 text-purple-700'}`}>
+                {s}
+                <button onClick={()=>removeSrc(s)} className="text-slate-300 hover:text-red-500 transition font-black ml-1">✕</button>
+              </span>
+            ))}
             </div>
           </div>
         </div>
