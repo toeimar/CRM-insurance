@@ -438,6 +438,30 @@
       );
     }
 
+    const saveAttachmentsToFirestore = async (customerId, attachments, db) => {
+  if (!db) return;
+  try {
+    await db.collection('crm_attachments').doc(customerId).set({
+      customerId,
+      attachments: attachments || [],
+      updatedAt: new Date().toISOString()
+    });
+  } catch(e) {
+    console.error('Save attachments error:', e);
+  }
+};
+
+const loadAttachmentsFromFirestore = async (customerId, db) => {
+  if (!db) return [];
+  try {
+    const doc = await db.collection('crm_attachments').doc(customerId).get();
+    if (doc.exists) return doc.data().attachments || [];
+    return [];
+  } catch(e) {
+    console.error('Load attachments error:', e);
+    return [];
+  }
+};
     const toBase64 = (file) => new Promise((res, rej) => {
       const r = new FileReader();
       r.onload = () => res(r.result);
