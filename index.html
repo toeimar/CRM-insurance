@@ -463,11 +463,30 @@ const loadAttachmentsFromFirestore = async (customerId, db) => {
   }
 };
     const toBase64 = (file) => new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(r.result);
-      r.onerror = rej;
-      r.readAsDataURL(file);
-    });
+  const r = new FileReader();
+  r.onload = () => res(r.result);
+  r.onerror = rej;
+  r.readAsDataURL(file);
+});
+
+const compressImage = (file, maxWidth = 800, quality = 0.6) => new Promise((res, rej) => {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      res(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = rej;
+    img.src = e.target.result;
+  };
+  reader.onerror = rej;
+  reader.readAsDataURL(file);
+});
 
     function RadarChart({ values, labels, size = 200 }) {
       const n = labels.length;
@@ -1683,7 +1702,30 @@ const loadAttachmentsFromFirestore = async (customerId, db) => {
     function CustomerModal({ customer, onClose, onSave, onDelete }) {
       const [formData, setFormData] = useState({...customer});
       const [isAddingPolicy, setIsAddingPolicy] = useState(false);
-      const [newPolicy, setNewPolicy] = useState({planName:'',policyNo:'',cycle:'รายปี',contractDate:'',endDate:'',premium:''});
+const [newPolicy, setNewPolicy] = useState({planName:'',policyNo:'',cycle:'รายปี',contractDate:'',endDate:'',premium:''});
+const [editingPolicyIndex, setEditingPolicyIndex] = useState(null);
+const [editingPolicy, setEditingPolicy] = useState(null);
+
+const handleEditPolicy = (i) => {
+  setEditingPolicyIndex(i);
+  setEditingPolicy({...(formData.policies[i])});
+};
+
+const handleSaveEditPolicy = () => {
+  const updated = [...(formData.policies||[])];
+  const nextRenewal = getNextRenewalDate(editingPolicy.contractDate, editingPolicy.cycle);
+  updated[editingPolicyIndex] = {...editingPolicy, nextRenewal};
+  const totalPremium = updated.reduce((acc,p) => acc + Number(p.premium||0), 0);
+  setFormData(prev => ({...prev, policies: updated, premium: totalPremium}));
+  setEditingPolicyIndex(null);
+  setEditingPolicy(null);
+};
+
+const handleDeletePolicy = (i) => {
+  const updated = (formData.policies||[]).filter((_,idx) => idx !== i);
+  const totalPremium = updated.reduce((acc,p) => acc + Number(p.premium||0), 0);
+  setFormData(prev => ({...prev, policies: updated, premium: totalPremium}));
+};
       const [isAiLoading, setIsAiLoading] = useState(false);
       const [aiInsight, setAiInsight] = useState(null);
       const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -1721,15 +1763,15 @@ const loadAttachmentsFromFirestore = async (customerId, db) => {
   onClose();
 };
       const handleImageUpload = async (e) => {
-        const files = Array.from(e.target.files);
-        const newAttachments = [];
-        for(const file of files){
-          if(!file.type.startsWith('image/')) continue;
-          const b64 = await toBase64(file);
-          newAttachments.push({ name: file.name, data: b64, date: getTodayStr(), category: activeAttachCategory, size: file.size });
-        }
-        setFormData(prev => ({ ...prev, attachments: [...(prev.attachments||[]), ...newAttachments] }));
-      };
+  const files = Array.from(e.target.files);
+  const newAttachments = [];
+  for(const file of files){
+    if(!file.type.startsWith('image/')) continue;
+    const b64 = await compressImage(file, 800, 0.6);
+    newAttachments.push({ name: file.name, data: b64, date: getTodayStr(), category: activeAttachCategory });
+  }
+  setFormData(prev => ({ ...prev, attachments: [...(prev.attachments||[]), ...newAttachments] }));
+};
 
       const removeAttachment = (idx) => { setFormData(prev=>({...prev,attachments:(prev.attachments||[]).filter((_,i)=>i!==idx)})); };
       const getAttachByCategory = (cat) => (formData.attachments||[]).filter(a => a.category === cat || (!a.category && cat === 'general'));
@@ -1928,20 +1970,37 @@ const loadAttachmentsFromFirestore = async (customerId, db) => {
                           <div className="bg-white p-6 rounded-3xl text-center border-2 border-emerald-100 border-dashed"><p className="text-emerald-600 font-black">ยังไม่มีข้อมูลกรมธรรม์</p></div>
                         ) : (
                           <div className="space-y-3">
-                            {formData.policies.map((p,i)=>(
-                              <div key={i} className="bg-white p-5 rounded-[1.5rem] border-2 border-emerald-100 shadow-sm">
-                                <div className="flex flex-wrap justify-between items-start gap-3">
-                                  <div>
-                                    <p className="font-black text-lg text-slate-800">{p.planName}</p>
-                                    <p className="text-xs font-black text-slate-400 mt-1 uppercase tracking-widest">เลข: {p.policyNo||'-'} | รอบ: {p.cycle} | เบี้ย: <span className="text-emerald-600">{formatCurrency(p.premium)}</span></p>
-                                  </div>
-                                  <div className="flex gap-2 flex-wrap">
-                                    {p.contractDate && <div className="text-right bg-emerald-50 px-4 py-2.5 rounded-2xl border border-emerald-100"><p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">วันทำสัญญา</p><p className="font-black text-emerald-700 text-sm">{toBuddhistYear(p.contractDate)}</p></div>}
-                                    <div className="text-right bg-orange-50 px-4 py-2.5 rounded-2xl border border-orange-100"><p className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-0.5">📅 ต่ออายุถัดไป</p><p className="font-black text-orange-700">{p.nextRenewal?toBuddhistYear(p.nextRenewal):toBuddhistYear(p.endDate)}</p></div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+                          {formData.policies.map((p,i)=>(
+  <div key={i} className="bg-white p-5 rounded-[1.5rem] border-2 border-emerald-100 shadow-sm">
+    {editingPolicyIndex === i ? (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="md:col-span-2"><label className="text-[10px] font-black text-slate-400 mb-1 block">ชื่อแผน</label><input type="text" value={editingPolicy.planName} onChange={e=>setEditingPolicy({...editingPolicy,planName:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"/></div>
+        <div><label className="text-[10px] font-black text-slate-400 mb-1 block">เลขกรมธรรม์</label><input type="text" value={editingPolicy.policyNo||''} onChange={e=>setEditingPolicy({...editingPolicy,policyNo:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"/></div>
+        <div><label className="text-[10px] font-black text-slate-400 mb-1 block">รอบชำระ</label><select value={editingPolicy.cycle} onChange={e=>setEditingPolicy({...editingPolicy,cycle:e.target.value})} className="w-full border-2 rounded-xl px-4 py-2 font-black"><option value="รายเดือน">รายเดือน</option><option value="ราย 3 เดือน">ราย 3 เดือน</option><option value="ราย 6 เดือน">ราย 6 เดือน</option><option value="รายปี">รายปี</option></select></div>
+        <div><label className="text-[10px] font-black text-emerald-600 mb-1 block">วันทำสัญญา</label><input type="date" value={editingPolicy.contractDate||''} onChange={e=>setEditingPolicy({...editingPolicy,contractDate:e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black"/></div>
+        <div><label className="text-[10px] font-black text-orange-500 mb-1 block">วันสิ้นสุด</label><input type="date" value={editingPolicy.endDate||''} onChange={e=>setEditingPolicy({...editingPolicy,endDate:e.target.value})} className="w-full border-2 border-orange-200 bg-orange-50 rounded-xl px-4 py-2 font-black"/></div>
+        <div className="md:col-span-2"><label className="text-[10px] font-black text-emerald-600 mb-1 block">ค่าเบี้ย</label><input type="number" value={editingPolicy.premium||''} onChange={e=>setEditingPolicy({...editingPolicy,premium:e.target.value})} className="w-full border-2 border-emerald-200 bg-emerald-50 rounded-xl px-4 py-2 font-black"/></div>
+        <button onClick={handleSaveEditPolicy} className="md:col-span-2 py-3 bg-emerald-500 text-white rounded-xl font-black hover:bg-emerald-600 transition">💾 บันทึก</button>
+        <button onClick={()=>setEditingPolicyIndex(null)} className="md:col-span-2 py-2 bg-slate-100 text-slate-600 rounded-xl font-black hover:bg-slate-200 transition">ยกเลิก</button>
+      </div>
+    ) : (
+      <div className="flex flex-wrap justify-between items-start gap-3">
+        <div>
+          <p className="font-black text-lg text-slate-800">{p.planName}</p>
+          <p className="text-xs font-black text-slate-400 mt-1 uppercase tracking-widest">เลข: {p.policyNo||'-'} | รอบ: {p.cycle} | เบี้ย: <span className="text-emerald-600">{formatCurrency(p.premium)}</span></p>
+        </div>
+        <div className="flex gap-2 flex-wrap items-start">
+          {p.contractDate && <div className="text-right bg-emerald-50 px-4 py-2.5 rounded-2xl border border-emerald-100"><p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">วันทำสัญญา</p><p className="font-black text-emerald-700 text-sm">{toBuddhistYear(p.contractDate)}</p></div>}
+          <div className="text-right bg-orange-50 px-4 py-2.5 rounded-2xl border border-orange-100"><p className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-0.5">📅 ต่ออายุถัดไป</p><p className="font-black text-orange-700">{p.nextRenewal?toBuddhistYear(p.nextRenewal):toBuddhistYear(p.endDate)}</p></div>
+          <div className="flex flex-col gap-1">
+            <button onClick={()=>handleEditPolicy(i)} className="px-3 py-2 bg-blue-50 text-blue-600 rounded-xl font-black text-xs hover:bg-blue-100 transition flex items-center gap-1"><Icon name="pencil-simple" size={14}/> แก้ไข</button>
+            <button onClick={()=>handleDeletePolicy(i)} className="px-3 py-2 bg-red-50 text-red-500 rounded-xl font-black text-xs hover:bg-red-100 transition flex items-center gap-1"><Icon name="trash" size={14}/> ลบ</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+))}
                           </div>
                         )}
                       </div>
