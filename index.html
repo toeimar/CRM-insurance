@@ -364,13 +364,51 @@
           ]);
         });
       });
-      const wsPolicy = XLSX.utils.aoa_to_sheet([policyHeaders, ...policyRows]);
+            const wsPolicy = XLSX.utils.aoa_to_sheet([policyHeaders, ...policyRows]);
       wsPolicy['!cols'] = [{wch:22},{wch:14},{wch:22},{wch:16},{wch:12},{wch:14},{wch:14},{wch:14}];
       XLSX.utils.book_append_sheet(wb, wsPolicy, 'กรมธรรม์');
 
-      // ดาวน์โหลดไฟล์
+      // --- Sheet 4: รูปภาพ/เอกสารแนบ ---
+      const attachHeaders = ['ชื่อลูกค้า','เบอร์โทร','หมวดหมู่','ชื่อไฟล์','วันที่แนบ','รูปภาพ (Base64)'];
+      const attachRows = [];
+      customers.forEach(c => {
+        (c.attachments || []).forEach(a => {
+          attachRows.push([
+            c.name || '',
+            c.phone || '',
+            a.category || 'general',
+            a.name || '',
+            a.date ? toBuddhistYear(a.date) : '',
+            a.data || ''
+          ]);
+        });
+      });
+      const wsAttach = XLSX.utils.aoa_to_sheet([attachHeaders, ...attachRows]);
+      wsAttach['!cols'] = [{wch:22},{wch:14},{wch:14},{wch:20},{wch:14},{wch:50}];
+      XLSX.utils.book_append_sheet(wb, wsAttach, 'รูปภาพแนบ');
+
+      // ดาวน์โหลดไฟล์ xlsx (ข้อมูล + ลิงก์รูปแบบ Base64)
       const fname = `IA_CRM_Backup_${agentName}_${timestamp.replace(/[: ]/g,'-')}.xlsx`;
       XLSX.writeFile(wb, fname);
+
+      // ดาวน์โหลดรูปภาพจริงแยกเป็นไฟล์ (เปิดดูง่ายกว่า Base64 ใน Excel)
+      let imgCount = 0;
+      customers.forEach(c => {
+        (c.attachments || []).forEach(a => {
+          if (!a.data) return;
+          imgCount++;
+          setTimeout(() => {
+            const link = document.createElement('a');
+            link.href = a.data;
+            const safeName = (c.name || 'customer').replace(/[^a-zA-Z0-9ก-๙]/g,'_');
+            link.download = `${safeName}_${a.category || 'general'}_${imgCount}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }, imgCount * 300);
+        });
+      });
+
       return fname;
     };
 
