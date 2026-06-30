@@ -228,6 +228,10 @@
       return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear() + 543}`;
     };
     const getTodayStr = () => new Date().toISOString().split('T')[0];
+    const BuddhistYearHint = ({ dateValue }) => {
+  if (!dateValue) return null;
+  return <span className="text-[10px] font-black text-emerald-600 ml-2">({toBuddhistYear(dateValue)})</span>;
+};
 
     const getNextRenewalDate = (startDateStr, cycle) => {
       if(!startDateStr) return null;
@@ -370,7 +374,38 @@
       return fname;
     };
 
-    const getWeekKey = () => {
+    const sendDailyProgressReport = (customers, user) => {
+  const today = getTodayStr();
+  const key = `daily_progress_sent_${user.id}_${today}`;
+  if (localStorage.getItem(key)) return;
+
+  const myCustomers = customers.filter(c => c.agent_id === user.id);
+  if (myCustomers.length === 0) return;
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const closedThisMonth = myCustomers.filter(c => c.status === 'ปิดการขาย' && c.closedDate && new Date(c.closedDate).getMonth() === currentMonth && new Date(c.closedDate).getFullYear() === currentYear);
+  const revThisMonth = closedThisMonth.reduce((acc,c) => acc + Number(c.premium||0), 0);
+  const target = user.targetRevenue || 0;
+  const progress = target > 0 ? Math.round((revThisMonth/target)*100) : 0;
+
+  const newLeadsToday = myCustomers.filter(c => c.lastContact === today).length;
+  const closedToday = myCustomers.filter(c => c.status === 'ปิดการขาย' && c.closedDate === today).length;
+
+  const statusCounts = STATUS_LIST.map(s => `${s}: ${myCustomers.filter(c=>c.status===s).length}`).join(' | ');
+
+  const msg = `📊 <b>สรุปความคืบหน้าประจำวัน</b>\n👤 ${user.name}\n📅 ${toBuddhistYear(today)}\n\n` +
+    `🎯 เป้าเดือนนี้: ${formatCurrency(target)}\n💰 ทำได้แล้ว: ${formatCurrency(revThisMonth)} (${progress}%)\n\n` +
+    `📌 สถานะลูกค้า: ${statusCounts}\n\n` +
+    `✅ ปิดการขายวันนี้: ${closedToday} ราย\n📞 อัปเดตติดต่อวันนี้: ${newLeadsToday} ราย`;
+
+  notifyTelegram(msg, user.telegramChatId || TELEGRAM_CHAT_ID);
+  localStorage.setItem(key, 'true');
+};
+
+const getWeekKey = () => {
       const now = new Date();
       const startOfYear = new Date(now.getFullYear(), 0, 1);
       const weekNum = Math.ceil(((now - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
@@ -579,13 +614,14 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => new Promise((res,
       }, [db]);
 
       useEffect(() => {
-        if (currentUser && customers.length > 0) {
-          const now = new Date();
-          if (now.getDay() === 0) {
-            setTimeout(() => runWeeklyBackup(customers, currentUser), 5000);
-          }
-        }
-      }, [currentUser, customers]);
+  if (currentUser && customers.length > 0) {
+    const now = new Date();
+    if (now.getDay() === 0) {
+      setTimeout(() => runWeeklyBackup(customers, currentUser), 5000);
+    }
+    setTimeout(() => sendDailyProgressReport(customers, currentUser), 6000);
+  }
+}, [currentUser, customers]);
 
       const writeData = async (col, id, data) => {
         if(db) { try { await db.collection(col).doc(id).set(data); } catch(e) { showToast("พบปัญหาบันทึกข้อมูล",'error'); } }
@@ -1546,7 +1582,7 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => new Promise((res,
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 <div className="lg:col-span-2"><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">ชื่อ - นามสกุล *</label><input required type="text" name="name" value={formData.name} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-black text-slate-800"/></div>
                 <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">เพศ</label><select name="gender" value={formData.gender} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black text-slate-800"><option value="Male">ชาย</option><option value="Female">หญิง</option></select></div>
-                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">ว/ด/ป เกิด (ค.ศ.)</label><input type="date" name="dob" value={formData.dob} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black text-slate-800"/></div>
+                <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">ว/ด/ป เกิด<BuddhistYearHint dateValue={formData.dob}/></label><input type="date" name="dob" value={formData.dob} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black text-slate-800"/></div>
                 <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">อายุ (ปี)</label><input type="number" name="age" value={formData.age} onChange={handleChange} className="w-full px-5 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black text-slate-800"/></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">สถานะครอบครัว</label><select name="familyStatus" value={formData.familyStatus} onChange={handleChange} className="w-full px-4 py-4 border-2 border-slate-200 rounded-2xl outline-none font-black"><option>โสด</option><option>สมรส</option><option>หย่าร้าง</option></select></div>
